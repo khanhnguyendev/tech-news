@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Playwright v1.60.0",
+    "tag_name": "v1.60.0",
+    "html_url": "https://github.com/microsoft/playwright/releases/tag/v1.60.0",
+    "published_at": "2026-08-12T10:00:00Z",
+    "draft": false,
+    "prerelease": false,
+    "body": "### Highlights\r\n\r\nNew locator API and faster tracing."
+  },
+  {
+    "name": "",
+    "tag_name": "v1.61.0-alpha.1",
+    "html_url": "https://github.com/microsoft/playwright/releases/tag/v1.61.0-alpha.1",
+    "published_at": "2026-08-12T11:00:00Z",
+    "draft": false,
+    "prerelease": true,
+    "body": "Alpha build."
+  },
+  {
+    "name": "Unreleased draft",
+    "tag_name": "v1.62.0",
+    "html_url": "https://github.com/microsoft/playwright/releases/tag/v1.62.0",
+    "published_at": null,
+    "draft": true,
+    "prerelease": false,
+    "body": "Not ready."
+  }
+]
