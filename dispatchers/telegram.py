@@ -277,6 +277,16 @@ def send_video(session, token: str, chat_id: str, video_path: Path, caption: str
             timeout=HTTP_TIMEOUT * VIDEO_TIMEOUT_MULTIPLIER,
         )
     _check(response)
+    # Logged here rather than left to the caller so the delivery is visible
+    # however send_video is reached. Without it a run's log ended at "wrote
+    # recap.mp4", and the only way to tell whether the upload landed was to
+    # open Telegram. The size is included because Telegram rejects bot
+    # uploads over 50 MB, which is the failure this line will be read about.
+    log.info(
+        "Telegram video delivered: %s (%.1f KB)",
+        video_path.name,
+        video_path.stat().st_size / 1024,
+    )
 
 
 def dispatch(
