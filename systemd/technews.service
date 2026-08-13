@@ -1,0 +1,12 @@
+[Unit]
+Description=TechNews daily digest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/ws/tech-news
+# Use the project's virtualenv interpreter, not the system python3: main.py
+# depends on PyYAML, requests, feedparser, beautifulsoup4/lxml, and Pillow,
+# and feedparser (at least) is not installed system-wide on this machine.
+ExecStart=%h/ws/tech-news/.venv/bin/python3 %h/ws/tech-news/main.py
