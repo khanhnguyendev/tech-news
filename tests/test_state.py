@@ -63,3 +63,21 @@ def test_cutoff_first_run_uses_lookback():
 def test_cutoff_is_always_timezone_aware():
     now = datetime(2026, 8, 14, 8, 0, tzinfo=UTC)
     assert freshness_cutoff(State(None, []), now, 6, 24).tzinfo is not None
+
+
+def test_seen_as_string_is_preserved_as_bad(tmp_path):
+    path = tmp_path / "history.json"
+    path.write_text('{"seen": "not-a-list"}')
+    state = load_state(path)
+    assert state.seen == []
+    assert state.last_run is None
+    assert (tmp_path / "history.json.bad").read_text() == '{"seen": "not-a-list"}'
+
+
+def test_seen_as_dict_is_preserved_as_bad(tmp_path):
+    path = tmp_path / "history.json"
+    path.write_text('{"seen": {"a": "b"}}')
+    state = load_state(path)
+    assert state.seen == []
+    assert state.last_run is None
+    assert (tmp_path / "history.json.bad").read_text() == '{"seen": {"a": "b"}}'

@@ -25,8 +25,18 @@ def load_state(path: Path = HISTORY_FILE) -> State:
         return State()
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        seen = [str(item) for item in raw.get("seen", [])]
+        # Validate structure: top level must be dict
+        if not isinstance(raw, dict):
+            raise TypeError(f"Expected dict at top level, got {type(raw).__name__}")
+        # Validate seen: must be list if present
+        seen_raw = raw.get("seen", [])
+        if not isinstance(seen_raw, list):
+            raise TypeError(f"Expected 'seen' to be list, got {type(seen_raw).__name__}")
+        seen = [str(item) for item in seen_raw]
+        # Validate last_run: must be string or None if present
         last_run_raw = raw.get("last_run")
+        if last_run_raw is not None and not isinstance(last_run_raw, str):
+            raise TypeError(f"Expected 'last_run' to be string or null, got {type(last_run_raw).__name__}")
         last_run = _parse_iso(last_run_raw) if last_run_raw else None
     except (json.JSONDecodeError, ValueError, AttributeError, TypeError) as exc:
         bad_path = path.with_suffix(path.suffix + ".bad")
