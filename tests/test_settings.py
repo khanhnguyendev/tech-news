@@ -76,6 +76,27 @@ def test_gate_defaults_to_published(tmp_path):
 
 def test_load_env_does_not_override_shell(tmp_path, monkeypatch):
     monkeypatch.setenv("TECHNEWS_TELEGRAM_CHAT_ID", "from-shell")
+    # load_env() writes straight into os.environ (bypassing monkeypatch's
+    # setenv/delenv), so monkeypatch can only undo that write if it was
+    # told, before the write happens, that it owns this key.
+    #
+    # monkeypatch.delenv(..., raising=False) is NOT enough by itself: it
+    # only records an undo action when the key already exists (see
+    # _pytest.monkeypatch.MonkeyPatch.delitem) -- so on a clean machine,
+    # where TECHNEWS_TELEGRAM_BOT_TOKEN was never exported, delenv() would
+    # see nothing to delete and register nothing, and load_env()'s write
+    # of "tok" a few lines down would leak into every later test in this
+    # process, undetected.
+    #
+    # setenv() with a placeholder registers the key's true original value
+    # (present or not) unconditionally, so teardown always restores it
+    # correctly. The plain `del` right after removes it from os.environ
+    # *without* another monkeypatch registration, so load_env() sees the
+    # key as genuinely missing and writes "tok" -- exactly the scenario
+    # this test means to exercise, on every machine, whether or not a
+    # real bot token is currently exported.
+    monkeypatch.setenv("TECHNEWS_TELEGRAM_BOT_TOKEN", "placeholder")
+    del os.environ["TECHNEWS_TELEGRAM_BOT_TOKEN"]
     (tmp_path / ".env").write_text(
         "TECHNEWS_TELEGRAM_CHAT_ID=from-file\nTECHNEWS_TELEGRAM_BOT_TOKEN=tok\n"
     )
