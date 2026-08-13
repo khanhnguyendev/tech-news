@@ -144,6 +144,18 @@ def render_digest(
         continued = False
         while index < len(in_category):
             label = heading if not continued else f"{heading} <i>(cont.)</i>"
+            # Flush before sizing, not after. add_block() flushes when the
+            # block it is handed does not fit, but by then the block was
+            # already sized against the old, nearly-full buffer -- so it
+            # lands in a fresh chunk carrying only the one item the forced
+            # first-item rule let through, and the next pass immediately
+            # adds a second "(cont.)" block behind it. The reader sees the
+            # same category heading twice in one message, the first with a
+            # single stray article. Deciding here means the sub-block is
+            # always sized against the buffer it actually ends up in.
+            smallest_block = len(label) + 1 + len(items[index]) + 2
+            if current_lines and current_len + smallest_block > limit:
+                flush()
             budget = max(limit - current_len - 2, len(label) + 1)
             sub_lines = [label]
             sub_ids: list[str] = []
