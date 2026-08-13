@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from models import Article, HTTP_TIMEOUT, log
+from models import Article, HTTP_TIMEOUT, log, log_file
 
 MAX_MESSAGE_CHARS = 4096
 API_TEMPLATE = "https://api.telegram.org/bot{token}/{method}"
@@ -32,9 +32,21 @@ def escape(text: str) -> str:
     return html_module.escape(text, quote=False)
 
 
+def _escape_attr(text: str) -> str:
+    """Escape for use inside a double-quoted HTML attribute value.
+
+    Unlike escape(), used for text nodes where a literal quote is legal
+    Telegram HTML and left alone, this also escapes quotes: an article
+    link is interpolated into href="...", and a source URL containing a
+    literal " would otherwise let it break out of the attribute and
+    produce malformed HTML that Telegram rejects with a 400.
+    """
+    return html_module.escape(text, quote=True)
+
+
 def _render_item(article: Article, include_blurb: bool) -> str:
     line = (
-        f'• <a href="{escape(article.link)}">{escape(article.headline)}</a>'
+        f'• <a href="{_escape_attr(article.link)}">{escape(article.headline)}</a>'
         f" — <i>{escape(article.source)}</i>"
     )
     if include_blurb and article.blurb:
@@ -51,7 +63,7 @@ def _ordered_categories(articles: list[Article], category_order: list[str]) -> l
 
 def _failure_footer(failed_count: int) -> str:
     plural = "" if failed_count == 1 else "s"
-    return f"⚠️ {failed_count} source{plural} failed — see ~/.technews/app.log"
+    return f"⚠️ {failed_count} source{plural} failed — see {log_file()}"
 
 
 def render_digest(

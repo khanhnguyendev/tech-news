@@ -101,6 +101,28 @@ def test_split_never_cuts_inside_a_tag():
         assert chunk.html.count("<b>") == chunk.html.count("</b>")
 
 
+def test_href_with_a_literal_quote_cannot_break_out_of_the_attribute():
+    """escape() deliberately uses quote=False so a literal quote in a
+    headline (legal in Telegram HTML text) is left alone. But the same
+    function was also used to interpolate the article link into
+    href="...", an attribute value, not a text node -- a source URL
+    containing a literal '"' would close the attribute early there,
+    producing malformed HTML that Telegram's API rejects with a 400 for
+    the whole chunk. The href needs its own quote-escaping helper."""
+    article = make(
+        "Headline",
+        link='https://x.test/p?q="><script>alert(1)</script>',
+    )
+    [chunk] = render_digest([article], ["Security"], day=DAY)
+
+    start = chunk.html.index('href="') + len('href="')
+    end = chunk.html.index('"', start)
+    href_value = chunk.html[start:end]
+
+    assert '"' not in href_value
+    assert "&quot;" in chunk.html
+
+
 def test_no_articles_produces_no_chunks():
     assert render_digest([], ["Security"], day=DAY) == []
 
@@ -188,6 +210,18 @@ SIZE_TABLE = [
     {"Alpha": 40, "Beta": 40, "Gamma": 40},
     {"Alpha": 200, "Beta": 1, "Gamma": 50},
 ]
+
+
+def test_failure_footer_names_the_configured_data_dir(monkeypatch):
+    """The footer used to hardcode '~/.technews/app.log', which is wrong
+    whenever TECHNEWS_DATA_DIR is set -- the reader would be pointed at a
+    log file that doesn't exist. It must name wherever log_file() actually
+    resolves to right now."""
+    monkeypatch.setenv("TECHNEWS_DATA_DIR", "/srv/technews-data")
+    articles = [make("one"), make("two")]
+    [chunk] = render_digest(articles, ["Security"], day=DAY, failed_count=2)
+    assert "/srv/technews-data/app.log" in chunk.html
+    assert "~/.technews/app.log" not in chunk.html
 
 
 def test_failure_footer_appears_on_last_chunk_when_sources_failed():
