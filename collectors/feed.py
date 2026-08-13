@@ -17,14 +17,16 @@ from collectors.http import fetch
 from models import Article, log
 
 _TAG_RE = re.compile(r"<[^>]+>")
+_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([.,!?;:)\]])")
 _WHITESPACE_RE = re.compile(r"\s+")
 
 
 def strip_html(value: str, limit: int = 200) -> str:
     """Turn a feed summary into a short plain-text blurb."""
-    text = _TAG_RE.sub("", value or "")
+    text = _TAG_RE.sub(" ", value or "")
     text = html_module.unescape(text)
-    text = _WHITESPACE_RE.sub(" ", text).strip()
+    text = _WHITESPACE_RE.sub(" ", text)
+    text = _SPACE_BEFORE_PUNCT_RE.sub(r"\1", text).strip()
     return text[:limit]
 
 

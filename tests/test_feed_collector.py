@@ -92,3 +92,12 @@ def test_fetch_failure_propagates():
 def test_strip_html_truncates_and_collapses_whitespace():
     assert strip_html("<p>a   b</p>\n<p>c</p>") == "a b c"
     assert len(strip_html("x" * 500)) == 200
+
+
+def test_strip_html_separates_adjacent_block_tags():
+    assert strip_html("<p>First para.</p><p>Second para.</p>") == "First para. Second para."
+    assert strip_html("<li>one</li><li>two</li>") == "one two"
+
+
+def test_strip_html_does_not_leave_space_before_punctuation():
+    assert strip_html("<p>Body text with <b>markup</b>.</p>") == "Body text with markup."
