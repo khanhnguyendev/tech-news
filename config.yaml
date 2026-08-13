@@ -12,7 +12,15 @@ limits:
   max_total: 60
 
 history:
-  max_entries: 800
+  # Must exceed the number of ids simultaneously visible across ALL sources
+  # in one collection pass, plus several days of normal delivery volume --
+  # NOT "days of history". eviction is FIFO (oldest ids evicted first), so
+  # an undersized value evicts the very ids `--init` just seeded, and any
+  # source on `gate: new_only` (where dedup is the *only* gate, so an item
+  # can stay in the visible window for months) will re-deliver its back
+  # catalogue once its ids age out. Re-check this number whenever a source
+  # is added, or a source's gate is changed to `new_only`.
+  max_entries: 5000
 
 video:
   enabled: true

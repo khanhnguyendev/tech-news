@@ -170,6 +170,25 @@ The static site has its own `site.output_dir` setting in `config.yaml`,
 separate from `TECHNEWS_DATA_DIR` — it defaults to `~/.technews/site` but is
 not moved by that variable (see [Optional outputs](#optional-outputs)).
 
+## Known limitations
+
+- **Truncated or failed articles are never retried.** Articles dropped by
+  `limits.max_per_source`/`limits.max_total`, and articles from a source
+  that failed to collect on a given run, are not marked seen — but
+  `last_run` still advances past them, so the next run's freshness cutoff
+  excludes them anyway. They are lost, not delayed. Holding `last_run` back
+  to retry them was considered and rejected: it risks unbounded window
+  growth while a source stays broken, and starvation when newest-first
+  limits keep favoring the same sources. The correct fix is a per-source
+  `last_run` (see the design spec's Future Work section) — a design change,
+  not a bug fix.
+- **`history.max_entries` must be re-checked whenever a source is added**,
+  or a source's `gate` is changed to `new_only`. It has to exceed the
+  number of ids simultaneously visible across all sources in one collection
+  pass, plus several days of normal delivery volume — see the comment
+  above `history.max_entries` in `config.yaml`. Sizing it by "days of
+  history" instead is the mistake that under-sized it the first time.
+
 ## Scheduling
 
 `systemd/technews.service` and `systemd/technews.timer` run the digest every

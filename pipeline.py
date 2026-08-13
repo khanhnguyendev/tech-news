@@ -72,10 +72,10 @@ def apply_limits(
             dropped_by_source[article.source] += 1
 
     for source, count in sorted(dropped_by_source.items()):
-        log.info("Per-source limit for %s: dropped %d item(s)", source, count)
+        log.warning("Per-source limit for %s: dropped %d item(s)", source, count)
 
     if len(kept) > max_total:
-        log.info("Total limit: dropped %d item(s)", len(kept) - max_total)
+        log.warning("Total limit: dropped %d item(s)", len(kept) - max_total)
         kept = kept[:max_total]
 
     return kept

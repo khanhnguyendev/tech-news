@@ -1,3 +1,5 @@
+import contextlib
+import logging
 from datetime import datetime, timezone
 
 from models import Article
@@ -83,3 +85,45 @@ def test_limits_log_dropped_counts(caplog):
     with caplog.at_level("INFO", logger="technews"):
         apply_limits(items, max_per_source=2, max_total=99)
     assert "dropped 3" in caplog.text.lower()
+
+
+def test_limits_truncation_logs_at_warning_not_info():
+    """Truncation is permanent article loss (item 8 of the fix wave): a
+    human scanning logs at the default level should see it. INFO-level
+    truncation logs are easy to miss in day-to-day operation; WARNING is
+    the level that actually gets noticed."""
+    per_source_items = [
+        make(f"h{i}", datetime(2026, 8, i + 1, tzinfo=UTC), source="A") for i in range(5)
+    ]
+    with logs_at_warning() as records:
+        apply_limits(per_source_items, max_per_source=2, max_total=99)
+    assert any("dropped 3" in r.getMessage().lower() for r in records)
+
+    total_items = [
+        make("a1", datetime(2026, 8, 5, tzinfo=UTC), source="A"),
+        make("b1", datetime(2026, 8, 4, tzinfo=UTC), source="B"),
+        make("c1", datetime(2026, 8, 3, tzinfo=UTC), source="C"),
+    ]
+    with logs_at_warning() as records:
+        apply_limits(total_items, max_per_source=10, max_total=2)
+    assert any("dropped 1" in r.getMessage().lower() for r in records)
+
+
+@contextlib.contextmanager
+def logs_at_warning():
+    """Capture only WARNING-and-above records on the 'technews' logger,
+    without pytest's caplog (whose at_level() would also happily capture
+    and pass on INFO-level records, defeating the point of this check)."""
+    logger = logging.getLogger("technews")
+    records: list[logging.LogRecord] = []
+
+    class _Handler(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    handler = _Handler(level=logging.WARNING)
+    logger.addHandler(handler)
+    try:
+        yield records
+    finally:
+        logger.removeHandler(handler)
