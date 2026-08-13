@@ -44,14 +44,41 @@ def _escape_attr(text: str) -> str:
     return html_module.escape(text, quote=True)
 
 
+DEFAULT_ICON = "📌"
+
+
 def _render_item(article: Article, include_blurb: bool) -> str:
-    line = (
-        f'• <a href="{_escape_attr(article.link)}">{escape(article.headline)}</a>'
-        f" — <i>{escape(article.source)}</i>"
-    )
+    """One article. The source is NOT repeated here -- it is carried by the
+    group label above, so a category with six publications reads as six
+    labelled blocks instead of one run of near-identical lines."""
+    line = f'• <a href="{_escape_attr(article.link)}">{escape(article.headline)}</a>'
     if include_blurb and article.blurb:
         line += f"\n  {escape(article.blurb)}"
     return line
+
+
+def _source_label(source: str) -> str:
+    return f"<i>{escape(source)}</i>"
+
+
+def _category_label(category: str, count: int, icons: dict[str, str]) -> str:
+    icon = icons.get(category, DEFAULT_ICON)
+    return f"{icon} <b>{escape(category.upper())}</b> · {count}"
+
+
+def _group_by_source(in_category: list[Article]) -> list[Article]:
+    """Partition a category's articles by source, stably.
+
+    The input is in the global newest-first order. Grouping keeps that
+    order in two ways: sources appear in the order their newest article
+    did, and each source's own articles stay newest-first. Nothing is
+    re-sorted, so the digest never contradicts the order the rest of the
+    system uses.
+    """
+    groups: dict[str, list[Article]] = {}
+    for article in in_category:
+        groups.setdefault(article.source, []).append(article)
+    return [article for group in groups.values() for article in group]
 
 
 def _ordered_categories(articles: list[Article], category_order: list[str]) -> list[str]:
@@ -74,6 +101,7 @@ def render_digest(
     include_blurb: bool = False,
     limit: int = MAX_MESSAGE_CHARS,
     failed_count: int = 0,
+    icons: dict[str, str] | None = None,
 ) -> list[Chunk]:
     """Render the digest into chunks that each fit one Telegram message.
 
@@ -87,12 +115,13 @@ def render_digest(
     file: the whole point is that an unattended run with a silently broken
     scraper still shows up somewhere the reader actually looks.
     """
+    icons = icons or {}
     if not articles:
         return []
 
     header = (
-        f"<b>TechNews — {day.strftime('%d %b %Y')}</b>\n"
-        f"<i>{len(articles)} stories</i>"
+        f"📰 <b>TechNews · {day.strftime('%d %b %Y')}</b>\n"
+        f"<i>{len(articles)} new item{'' if len(articles) == 1 else 's'}</i>"
     )
 
     chunks: list[Chunk] = []
@@ -130,8 +159,10 @@ def render_digest(
         current_len += addition
 
     for category in _ordered_categories(articles, category_order):
-        in_category = [a for a in articles if a.category == category]
-        heading = f"<b>{escape(category)}</b>"
+        in_category = _group_by_source(
+            [a for a in articles if a.category == category]
+        )
+        heading = _category_label(category, len(in_category), icons)
         items = [_render_item(a, include_blurb) for a in in_category]
 
         # Always split at item boundaries. The budget for each sub-block is
@@ -153,16 +184,35 @@ def render_digest(
             # same category heading twice in one message, the first with a
             # single stray article. Deciding here means the sub-block is
             # always sized against the buffer it actually ends up in.
-            smallest_block = len(label) + 1 + len(items[index]) + 2
+            first_source = _source_label(in_category[index].source)
+            smallest_block = (
+                len(label) + 1 + len(first_source) + 1 + len(items[index]) + 2
+            )
             if current_lines and current_len + smallest_block > limit:
                 flush()
-            budget = max(limit - current_len - 2, len(label) + 1)
+            budget = max(
+                limit - current_len - 2, len(label) + 1 + len(first_source) + 1
+            )
             sub_lines = [label]
             sub_ids: list[str] = []
             sub_len = len(label)
+            # Reset per sub-block, so a group split across chunks reopens
+            # its label in the continuation instead of leaving bare bullets
+            # whose publication the reader cannot identify.
+            open_source: str | None = None
             while index < len(in_category):
                 item = items[index]
+                source = in_category[index].source
+                source_line = None
+                if source != open_source:
+                    # Blank line before every group but the first in this
+                    # sub-block: the pause is what makes a category with
+                    # six publications scannable instead of one long run.
+                    prefix = "\n" if open_source is not None else ""
+                    source_line = prefix + _source_label(source)
                 addition = len(item) + 1
+                if source_line is not None:
+                    addition += len(source_line) + 1
                 # The first item of a sub-block is always let in regardless
                 # of budget, to guarantee progress. If a single rendered
                 # item alone is longer than the limit (an ~4000-char
@@ -171,6 +221,9 @@ def render_digest(
                 # against for a headline digest.
                 if sub_ids and sub_len + addition > budget:
                     break
+                if source_line is not None:
+                    sub_lines.append(source_line)
+                    open_source = source
                 sub_lines.append(item)
                 sub_ids.append(in_category[index].id)
                 sub_len += addition

@@ -100,5 +100,12 @@ def category_order(config: dict) -> list[str]:
     return order
 
 
+def category_icons(config: dict) -> dict[str, str]:
+    """Category name -> icon. Absent or empty is fine; the renderer has a
+    fallback, so a source introducing a new category still renders."""
+    icons = config.get("categories") or {}
+    return {str(k): str(v) for k, v in icons.items()}
+
+
 def gate_by_source(config: dict) -> dict[str, str]:
     return {s["name"]: s.get("gate", "published") for s in config["sources"]}

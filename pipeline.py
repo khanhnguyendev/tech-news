@@ -12,7 +12,7 @@ from pathlib import Path
 from collectors import collect_all
 from dispatchers import telegram
 from models import Article, HISTORY_FILE, log
-from settings import category_order, gate_by_source, get_secret
+from settings import category_icons, category_order, gate_by_source, get_secret
 from state import freshness_cutoff, load_state, save_state
 
 _FAR_PAST = datetime.min.replace(tzinfo=timezone.utc)
@@ -198,6 +198,7 @@ def run(
         day=now.date(),
         include_blurb=bool(telegram_cfg.get("include_blurb", False)),
         failed_count=collected.failed_count,
+        icons=category_icons(config),
     )
 
     if dry_run:
