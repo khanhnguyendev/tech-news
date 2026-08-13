@@ -132,6 +132,38 @@ def test_send_video_raises_on_api_error(tmp_path):
         send_video(session, "T", "C", video_path, "caption")
 
 
+def test_send_video_logs_the_delivery_with_its_size(tmp_path, caplog):
+    """send_message's delivery is visible in the log through dispatch(), but
+    send_video had no success line at all -- a run could generate and send
+    a video with the log showing only that the file was written, so the
+    only way to know it arrived was to open Telegram. The size belongs in
+    the line because Telegram rejects bot uploads over 50 MB, and that is
+    the failure this log is most likely to be read about.
+    """
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"x" * 2048)
+
+    with caplog.at_level("INFO", logger="technews"):
+        send_video(FakeSession(), "T", "C", video_path, "caption")
+
+    assert "clip.mp4" in caplog.text
+    assert "2.0 KB" in caplog.text
+
+
+def test_send_video_logs_nothing_when_the_api_rejects_it(tmp_path, caplog):
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"x" * 2048)
+    session = FakeSession(
+        [FakeResponse(400, {"ok": False, "description": "file too large"})]
+    )
+
+    with caplog.at_level("INFO", logger="technews"):
+        with pytest.raises(TelegramError):
+            send_video(session, "T", "C", video_path, "caption")
+
+    assert "clip.mp4" not in caplog.text
+
+
 def test_dispatch_returns_all_ids_on_success():
     delivered, error = dispatch(FakeSession(), "T", "C", chunks())
     assert delivered == ["id-1", "id-2", "id-3"]
