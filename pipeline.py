@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
-from models import Article, log
+from collectors import collect_all
+from dispatchers import telegram
+from models import Article, HISTORY_FILE, log
+from settings import category_order, gate_by_source, get_secret
+from state import freshness_cutoff, load_state, save_state
 
 _FAR_PAST = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -71,3 +77,124 @@ def apply_limits(
         kept = kept[:max_total]
 
     return kept
+
+
+@dataclass
+class RunOutcome:
+    exit_code: int
+    articles: list[Article]
+    delivered_ids: list[str]
+
+
+def _default_dispatch(session, config):
+    token = get_secret("TECHNEWS_TELEGRAM_BOT_TOKEN")
+    chat_id = get_secret("TECHNEWS_TELEGRAM_CHAT_ID")
+    disable_preview = bool(
+        config.get("telegram", {}).get("disable_web_page_preview", True)
+    )
+
+    def dispatch_fn(chunks):
+        return telegram.dispatch(
+            session, token, chat_id, chunks, disable_preview=disable_preview
+        )
+
+    return dispatch_fn
+
+
+def run(
+    config: dict,
+    *,
+    session,
+    now: datetime,
+    dry_run: bool = False,
+    init: bool = False,
+    only: str | None = None,
+    state_path: Path = HISTORY_FILE,
+    dispatch_fn=None,
+    extras_fn=None,
+) -> RunOutcome:
+    """Execute one full pipeline run and return its outcome.
+
+    `now` is the moment the run started; it becomes last_run on success.
+    Taking the start time rather than the finish time closes the window in
+    which an article published mid-run would fall between two runs.
+    """
+    telegram_cfg = config.get("telegram", {})
+    freshness_cfg = config.get("freshness", {})
+    limits_cfg = config.get("limits", {})
+    history_cfg = config.get("history", {})
+
+    state = load_state(state_path)
+    cutoff = freshness_cutoff(
+        state,
+        now,
+        int(freshness_cfg.get("overlap_hours", 6)),
+        int(freshness_cfg.get("first_run_lookback_hours", 24)),
+    )
+    log.info("Freshness cutoff: %s", cutoff.isoformat())
+
+    collected = collect_all(config["sources"], session, only=only)
+    if collected.attempted > 0 and collected.ok_count == 0:
+        log.error(
+            "All %d attempted source(s) failed; nothing persisted", collected.attempted
+        )
+        return RunOutcome(exit_code=3, articles=[], delivered_ids=[])
+
+    if init:
+        state.seen.extend(a.id for a in collected.articles)
+        state.last_run = now
+        save_state(state, state_path, int(history_cfg.get("max_entries", 800)))
+        log.info("Initialized history with %d id(s)", len(collected.articles))
+        return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
+
+    articles = drop_seen(collected.articles, set(state.seen))
+    articles = apply_gate(articles, cutoff, gate_by_source(config))
+    articles = apply_limits(
+        articles,
+        int(limits_cfg.get("max_per_source", 10)),
+        int(limits_cfg.get("max_total", 60)),
+    )
+    log.info("%d article(s) ready to dispatch", len(articles))
+
+    if not articles and not telegram_cfg.get("send_when_empty", False):
+        log.info("Nothing new today; sending nothing")
+        if not dry_run:
+            state.last_run = now
+            save_state(state, state_path, int(history_cfg.get("max_entries", 800)))
+        return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
+
+    chunks = telegram.render_digest(
+        articles,
+        category_order(config),
+        day=now.date(),
+        include_blurb=bool(telegram_cfg.get("include_blurb", False)),
+    )
+
+    if dry_run:
+        for chunk in chunks:
+            print(chunk.html)
+            print("-" * 60)
+        log.info("Dry run: nothing sent, nothing persisted")
+        return RunOutcome(exit_code=0, articles=articles, delivered_ids=[])
+
+    if dispatch_fn is None:
+        dispatch_fn = _default_dispatch(session, config)
+    delivered, error = dispatch_fn(chunks)
+
+    state.seen.extend(delivered)
+    if error is None:
+        state.last_run = now
+    else:
+        log.error("Telegram delivery incomplete; last_run left at %s", state.last_run)
+    save_state(state, state_path, int(history_cfg.get("max_entries", 800)))
+
+    if error is not None:
+        return RunOutcome(exit_code=2, articles=articles, delivered_ids=delivered)
+
+    if extras_fn is not None:
+        try:
+            extras_fn(articles)
+        except Exception as exc:  # noqa: BLE001 - extras are never critical
+            log.error("Optional output failed: %s: %s", type(exc).__name__, exc)
+
+    return RunOutcome(exit_code=0, articles=articles, delivered_ids=delivered)
