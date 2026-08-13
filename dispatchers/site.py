@@ -74,7 +74,22 @@ def _ordered_categories(articles, category_order):
     return ordered
 
 
-def render_page(articles: list[Article], category_order: list[str], *, day: date) -> str:
+def render_page(
+    articles: list[Article],
+    category_order: list[str],
+    *,
+    day: date,
+    archive_href: str = "archive/index.html",
+    today_href: str | None = None,
+) -> str:
+    """Render one page. `archive_href` and `today_href` are relative links,
+    resolved from wherever this particular rendering is written to disk --
+    the same HTML is never reused verbatim at two different locations
+    (out_dir/index.html vs. out_dir/archive/{day}.html have different
+    relative paths back to the same targets), so write_site() renders
+    twice with different link targets rather than writing one string to
+    both places.
+    """
     pretty_day = day.strftime("%d %b %Y")
     noun = "story" if len(articles) == 1 else "stories"
     parts = [
@@ -98,7 +113,10 @@ def render_page(articles: list[Article], category_order: list[str], *, day: date
             item.append("</li>")
             parts.append("".join(item))
         parts.append("</ul>")
-    parts.append('<footer><a href="archive/index.html">Archive</a></footer>')
+    footer_links = [f'<a href="{_esc(archive_href)}">Archive</a>']
+    if today_href is not None:
+        footer_links.append(f'<a href="{_esc(today_href)}">Today</a>')
+    parts.append(f"<footer>{' · '.join(footer_links)}</footer>")
     return _page(f"TechNews — {pretty_day}", "\n".join(parts))
 
 
@@ -111,24 +129,31 @@ def render_archive_index(days: list[date]) -> str:
     return _page("TechNews archive", body)
 
 
-def prune_archive(archive_dir: Path, keep_days: int, today: date) -> int:
-    """Delete archive pages older than keep_days. Returns how many went.
+def _dated_archive_pages(archive_dir: Path) -> list[date]:
+    """Every archive/*.html file whose stem is a plain YYYY-MM-DD date.
 
-    Only files whose name is a bare YYYY-MM-DD.html date are candidates.
-    The glob also matches archive/index.html and anything else dropped in
-    the directory, but strptime rejects any stem that isn't a plain date,
-    so those are skipped rather than deleted -- this function must never
-    touch a file it did not create itself.
+    Shared by prune_archive() and write_site() so the "which files are
+    ours" rule -- a parseable date stem, nothing else -- lives in exactly
+    one place. archive/index.html and any stray non-date file are
+    silently excluded, the same protection prune_archive() relies on to
+    never delete a file it didn't create.
     """
-    cutoff = today - timedelta(days=keep_days)
-    removed = 0
+    days = []
     for path in archive_dir.glob("*.html"):
         try:
-            day = datetime.strptime(path.stem, "%Y-%m-%d").date()
+            days.append(datetime.strptime(path.stem, "%Y-%m-%d").date())
         except ValueError:
             continue
+    return days
+
+
+def prune_archive(archive_dir: Path, keep_days: int, today: date) -> int:
+    """Delete archive pages older than keep_days. Returns how many went."""
+    cutoff = today - timedelta(days=keep_days)
+    removed = 0
+    for day in _dated_archive_pages(archive_dir):
         if day < cutoff:
-            path.unlink()
+            (archive_dir / f"{day.isoformat()}.html").unlink()
             removed += 1
     if removed:
         log.info("Site: pruned %d archived page(s)", removed)
@@ -142,21 +167,30 @@ def write_site(
     archive_dir = out_dir / "archive"
     archive_dir.mkdir(parents=True, exist_ok=True)
 
-    html = render_page(articles, category_order, day=day)
+    # Rendered twice, not written-once-and-reused: out_dir/index.html and
+    # archive_dir/{day}.html sit in different directories, so the relative
+    # link back to the archive index (and, from the archive, back to
+    # today) is a different string at each location. Re-rendering keeps
+    # every link honest without ever touching already-escaped HTML.
+    today_html = render_page(articles, category_order, day=day)
     index_path = out_dir / "index.html"
-    index_path.write_text(html, encoding="utf-8")
-    (archive_dir / f"{day.isoformat()}.html").write_text(html, encoding="utf-8")
+    index_path.write_text(today_html, encoding="utf-8")
+
+    archived_html = render_page(
+        articles,
+        category_order,
+        day=day,
+        archive_href="index.html",
+        today_href="../index.html",
+    )
+    (archive_dir / f"{day.isoformat()}.html").write_text(
+        archived_html, encoding="utf-8"
+    )
 
     prune_archive(archive_dir, int(cfg.get("keep_days", 30)), day)
 
-    days = []
-    for path in archive_dir.glob("*.html"):
-        try:
-            days.append(datetime.strptime(path.stem, "%Y-%m-%d").date())
-        except ValueError:
-            continue
     (archive_dir / "index.html").write_text(
-        render_archive_index(days), encoding="utf-8"
+        render_archive_index(_dated_archive_pages(archive_dir)), encoding="utf-8"
     )
 
     log.info("Site: wrote %s", index_path)

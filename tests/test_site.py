@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timezone
 
 from dispatchers.site import (
@@ -68,6 +69,22 @@ def test_page_groups_by_category_in_order():
     assert html.index(">Anthropic<") < html.index(">Security<")
 
 
+def test_page_unknown_category_appears_after_known_ones():
+    # config.yaml's category order equals first-appearance order; a
+    # category that isn't in that list (e.g. a newly added source whose
+    # category the config hasn't caught up to yet) must still render --
+    # just after all the categories the config does know about.
+    articles = [
+        make("s", category="Security"),
+        make("z", category="Zzz-Unlisted"),
+        make("a", category="Anthropic"),
+    ]
+    html = render_page(articles, ["Anthropic", "Security"], day=DAY)
+    assert ">Anthropic<" in html and ">Security<" in html and ">Zzz-Unlisted<" in html
+    last_known = max(html.index(">Anthropic<"), html.index(">Security<"))
+    assert html.index(">Zzz-Unlisted<") > last_known
+
+
 def test_page_shows_blurbs():
     html = render_page([make("h", blurb="Full detail here")], ["Security"], day=DAY)
     assert "Full detail here" in html
@@ -87,6 +104,38 @@ def test_page_header_shows_date_and_count():
     html = render_page([make("a"), make("b")], ["Security"], day=DAY)
     assert "13 Aug 2026" in html
     assert "2 stories" in html
+
+
+def _footer_hrefs(html):
+    footer = re.search(r"<footer>(.*?)</footer>", html, re.S).group(1)
+    return re.findall(r'href="([^"]+)"', footer)
+
+
+def test_write_site_links_resolve_from_their_own_directory(tmp_path):
+    # write_site() writes the *same* article set to two different
+    # directories: out_dir/index.html and out_dir/archive/{day}.html. A
+    # relative link that is correct from one location is generally wrong
+    # from the other -- out_dir/index.html's "archive/index.html" would
+    # resolve, from inside archive/, to the nonexistent
+    # archive/archive/index.html. This walks the *actual* hrefs the
+    # renderer produced (not a hardcoded guess at what they should be)
+    # and resolves each one against the file that actually contains it,
+    # so it fails if the two pages ever go back to sharing one rendered
+    # string.
+    cfg = {"enabled": True, "output_dir": str(tmp_path), "keep_days": 30}
+    write_site([make("a")], ["Security"], cfg, day=DAY)
+
+    today_page = tmp_path / "index.html"
+    for href in _footer_hrefs(today_page.read_text()):
+        target = (today_page.parent / href).resolve()
+        assert target.is_file(), f"{href} from {today_page} -> {target}"
+
+    archived_page = tmp_path / "archive" / "2026-08-13.html"
+    hrefs = _footer_hrefs(archived_page.read_text())
+    assert hrefs, "archived page has no footer links"
+    for href in hrefs:
+        target = (archived_page.parent / href).resolve()
+        assert target.is_file(), f"{href} from {archived_page} -> {target}"
 
 
 def test_write_site_creates_index_and_archive(tmp_path):
