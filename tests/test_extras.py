@@ -105,3 +105,57 @@ def test_send_failure_is_logged_and_swallowed(tmp_path, monkeypatch, caplog):
     with caplog.at_level("ERROR", logger="technews"):
         extras([article()])
     assert "upload rejected" in caplog.text
+
+
+def config_with_site(tmp_path, **site_overrides):
+    cfg = config()
+    cfg["video"]["enabled"] = False
+    cfg["site"] = {"enabled": True, "output_dir": str(tmp_path / "site"),
+                   "keep_days": 30}
+    cfg["site"].update(site_overrides)
+    cfg["sources"] = [{"name": "S", "category": "C", "type": "feed",
+                       "url": "https://x.test"}]
+    return cfg
+
+
+def test_site_is_written(tmp_path):
+    extras = make_extras(None, config_with_site(tmp_path), day=DAY, token="T",
+                         chat_id="C", data_dir=tmp_path)
+    extras([article("a")])
+    assert (tmp_path / "site" / "index.html").exists()
+
+
+def test_site_disabled_writes_nothing(tmp_path):
+    cfg = config_with_site(tmp_path)
+    cfg["site"]["enabled"] = False
+    extras = make_extras(None, cfg, day=DAY, token="T", chat_id="C",
+                         data_dir=tmp_path)
+    extras([article("a")])
+    assert not (tmp_path / "site").exists()
+
+
+def test_video_failure_does_not_prevent_the_site(tmp_path, monkeypatch, caplog):
+    cfg = config_with_site(tmp_path)
+    cfg["video"]["enabled"] = True
+
+    def boom(*a, **k):
+        raise RuntimeError("ffmpeg exploded")
+
+    monkeypatch.setattr(dispatchers.video, "generate", boom)
+    extras = make_extras(None, cfg, day=DAY, token="T", chat_id="C",
+                         data_dir=tmp_path)
+    with caplog.at_level("ERROR", logger="technews"):
+        extras([article("a")])
+    assert (tmp_path / "site" / "index.html").exists()
+
+
+def test_site_failure_is_logged_and_swallowed(tmp_path, monkeypatch, caplog):
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(dispatchers.site, "write_site", boom)
+    extras = make_extras(None, config_with_site(tmp_path), day=DAY, token="T",
+                         chat_id="C", data_dir=tmp_path)
+    with caplog.at_level("ERROR", logger="technews"):
+        extras([article("a")])
+    assert "disk full" in caplog.text

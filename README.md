@@ -20,20 +20,50 @@ every morning.
    Telegram digest and send it; a failure here is the only thing that stops
    history from being persisted for the affected articles
 5. **persist** — record `last_run` and the newly delivered ids, atomically
+6. **extras** — once the digest above has sent successfully, optionally build
+   a video recap and/or a static site from the same article list (see
+   [Optional outputs](#optional-outputs)). Both run only on a full,
+   non-dry-run, non-`--init` invocation, after step 5, and neither can affect
+   the run's exit code or undo what step 5 already persisted.
 
-Only the Telegram digest is implemented today. `config.yaml` also carries a
-`video` and a `site` section for the video-recap and static-site outputs
-described in the project's design spec, but those dispatchers don't exist
-yet (they're future milestones) — `main.py` reads and ignores those sections
-for now.
+## Optional outputs
+
+Two extra outputs can be produced from the same digest, each toggled
+independently in `config.yaml` and each isolated from the other: a failure in
+one is logged and swallowed, and the other one still runs. Neither one can
+change the process exit code — by the time either runs, the Telegram digest
+has already been sent and history already persisted.
+
+- **Video recap** (`video.enabled: true`) — a silent slideshow (one slide per
+  article, plus a cover slide) rendered with Pillow and encoded with
+  `ffmpeg`, then sent to the same Telegram chat as the digest when
+  `video.send_to_telegram` is `true` (the default). Tune `seconds_per_slide`,
+  `max_slides`, `resolution`, `font`, and `music` under `video:` in
+  `config.yaml`. If `ffmpeg` isn't on `PATH`, video generation is skipped
+  with a warning — it does not fail the run.
+- **Static site** (`site.enabled: true`) — a self-contained HTML page (no
+  JavaScript, no server, no external assets) written to `site.output_dir`
+  (default `~/.technews/site`), plus a rolling archive under
+  `<output_dir>/archive/`. Open it with:
+
+  ```bash
+  xdg-open ~/.technews/site/index.html
+  ```
+
+  Each run overwrites `index.html` with today's digest and adds
+  `archive/<YYYY-MM-DD>.html` for that day; `archive/index.html` links to
+  every archived day. `site.keep_days` (default 30) controls how many of the
+  most recent archived days are kept — older archive pages are deleted on
+  the next run that writes the site.
 
 ## Requirements
 
 - Python 3.10+
 - The packages in `requirements.txt` (`requests`, `feedparser`,
   `beautifulsoup4`, `lxml`, `PyYAML`, `Pillow`)
-- `ffmpeg` and the DejaVu fonts, for the not-yet-built video output —
-  harmless to install now, not required for the Telegram digest to work
+- `ffmpeg` and the DejaVu fonts, for the video recap output — only needed if
+  `video.enabled` is `true` in `config.yaml`; the Telegram digest and the
+  static site work without them
 - A Telegram bot token and a destination chat id
 
 ## Setup
@@ -125,7 +155,7 @@ Read from the shell environment first, then from `.env` in the project root
 
 ## State and logs
 
-Both live under `~/.technews/` by default (override with the
+These live under `~/.technews/` by default (override with the
 `TECHNEWS_DATA_DIR` environment variable):
 
 - `~/.technews/history.json` — dedup ledger (`seen` ids) and `last_run`,
@@ -133,6 +163,12 @@ Both live under `~/.technews/` by default (override with the
   than overwritten
 - `~/.technews/app.log` — rotating log (1 MB × 3 backups), mirrored to
   stderr
+- `~/.technews/video/` — the video recap's working files and `recap.mp4`,
+  overwritten each run `video.enabled` is on
+
+The static site is not under `~/.technews/` by default — it has its own
+`site.output_dir` setting in `config.yaml` (see
+[Optional outputs](#optional-outputs)).
 
 ## Scheduling
 
