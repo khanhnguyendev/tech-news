@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Textual Feed</title>
+  <item>
+    <title>Story with textual zone</title>
+    <link>https://textual.test/post-1</link>
+    <pubDate>Wed, 12 Aug 2026 08:00:00 EDT</pubDate>
+  </item>
+</channel></rss>

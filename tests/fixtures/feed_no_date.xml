@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Undated Feed</title>
+  <item>
+    <title>Story with no date at all</title>
+    <link>https://undated.test/post-1</link>
+  </item>
+</channel></rss>

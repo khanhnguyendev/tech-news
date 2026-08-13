@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Zulu Feed</title>
+  <entry>
+    <title>Story with Zulu timestamp</title>
+    <link href="https://zulu.test/post-1"/>
+    <published>2026-08-12T12:00:00Z</published>
+    <summary>Plain summary.</summary>
+  </entry>
+</feed>
