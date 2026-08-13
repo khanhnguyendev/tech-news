@@ -25,5 +25,14 @@
     "draft": true,
     "prerelease": false,
     "body": "Not ready."
+  },
+  {
+    "name": "Scheduled release",
+    "tag_name": "v1.63.0",
+    "html_url": "https://github.com/microsoft/playwright/releases/tag/v1.63.0",
+    "published_at": null,
+    "draft": false,
+    "prerelease": false,
+    "body": "This is a scheduled release that has not been published yet. It includes significant improvements to the browser automation API, enhanced debugging capabilities, and better performance metrics for large-scale testing scenarios. These features were developed over several sprints with community feedback."
   }
 ]

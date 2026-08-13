@@ -48,14 +48,14 @@ def source(**overrides):
 
 def test_excludes_drafts_and_prereleases_by_default():
     articles = collect(source(), RecordingSession(payload()))
-    assert [a.headline for a in articles] == ["Playwright v1.60.0"]
+    assert [a.headline for a in articles] == ["Playwright v1.60.0", "Scheduled release"]
 
 
 def test_includes_prereleases_when_configured():
     articles = collect(
         source(include_prereleases=True), RecordingSession(payload())
     )
-    assert len(articles) == 2
+    assert len(articles) == 3
 
 
 def test_falls_back_to_tag_name_when_name_is_blank():
@@ -66,14 +66,24 @@ def test_falls_back_to_tag_name_when_name_is_blank():
 
 
 def test_parses_published_at_as_utc():
-    [article] = collect(source(), RecordingSession(payload()))
-    assert article.published == datetime(2026, 8, 12, 10, 0, tzinfo=UTC)
+    articles = collect(source(), RecordingSession(payload()))
+    dated = [a for a in articles if a.headline == "Playwright v1.60.0"]
+    assert len(dated) == 1
+    assert dated[0].published == datetime(2026, 8, 12, 10, 0, tzinfo=UTC)
 
 
 def test_blurb_is_truncated_release_body():
-    [article] = collect(source(), RecordingSession(payload()))
-    assert article.blurb.startswith("### Highlights")
-    assert len(article.blurb) <= 200
+    articles = collect(source(), RecordingSession(payload()))
+    scheduled = [a for a in articles if a.headline == "Scheduled release"]
+    assert len(scheduled) == 1
+    assert len(scheduled[0].blurb) == 200
+
+
+def test_null_published_at_yields_none_without_crashing():
+    articles = collect(source(), RecordingSession(payload()))
+    undated = [a for a in articles if a.published is None]
+    assert len(undated) == 1
+    assert undated[0].published is None
 
 
 def test_requests_the_right_url():
