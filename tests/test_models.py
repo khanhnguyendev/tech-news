@@ -1,6 +1,7 @@
+import logging
 from datetime import datetime, timezone
 
-from models import Article, normalize_url
+from models import Article, log, log_file, normalize_url, setup_logging
 
 
 def test_normalize_strips_utm_and_trailing_slash():
@@ -39,3 +40,36 @@ def test_article_is_frozen():
     a = Article("c", "s", "h", "https://x.test", None)
     with pytest.raises(dataclasses.FrozenInstanceError):
         a.headline = "changed"
+
+
+def test_setup_logging_writes_to_the_current_data_dir(tmp_path, monkeypatch):
+    """setup_logging() had no direct test at all before this: nothing
+    pinned that it resolves log_file() at call time (not import time) or
+    that it actually produces a readable log file where TECHNEWS_DATA_DIR
+    currently points."""
+    monkeypatch.setenv("TECHNEWS_DATA_DIR", str(tmp_path))
+    try:
+        setup_logging()
+        log.info("hello from test_setup_logging")
+        for handler in log.handlers:
+            handler.flush()
+        assert log_file() == tmp_path / "app.log"
+        assert log_file().exists()
+        assert "hello from test_setup_logging" in log_file().read_text()
+    finally:
+        for handler in log.handlers:
+            handler.close()
+        log.handlers.clear()
+
+
+def test_setup_logging_verbose_flag_controls_level(tmp_path, monkeypatch):
+    monkeypatch.setenv("TECHNEWS_DATA_DIR", str(tmp_path))
+    try:
+        setup_logging(verbose=True)
+        assert log.level == logging.DEBUG
+        setup_logging(verbose=False)
+        assert log.level == logging.INFO
+    finally:
+        for handler in log.handlers:
+            handler.close()
+        log.handlers.clear()

@@ -80,8 +80,12 @@ def _reset(assume_yes: bool) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    setup_logging(args.verbose)
+    # load_env() first: a TECHNEWS_DATA_DIR set only in .env (not the shell)
+    # must be in os.environ before setup_logging() resolves where app.log
+    # goes, otherwise the log lands in a different directory than
+    # history.json and the video output.
     load_env(PROJECT_ROOT)
+    setup_logging(args.verbose)
 
     try:
         config = load_config(args.config)

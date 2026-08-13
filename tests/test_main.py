@@ -112,6 +112,53 @@ def test_reset_on_missing_history_is_not_an_error(config_file):
     assert main(["--config", str(config_file), "--reset", "--yes"]) == 0
 
 
+def test_data_dir_from_dotenv_puts_log_and_history_together(tmp_path, monkeypatch):
+    """Regression for main() originally calling setup_logging() before
+    load_env(): a TECHNEWS_DATA_DIR that exists only in .env (never
+    exported in the shell) must still be visible by the time
+    setup_logging() resolves where app.log goes -- otherwise the log lands
+    in one directory while history.json and the video output go to
+    another. This overrides the autouse isolated_data_dir fixture (which
+    always sets the env var directly, bypassing .env entirely) so the
+    only source of TECHNEWS_DATA_DIR here is the .env file.
+
+    Path.home() is patched into tmp_path as a safety net: if the ordering
+    regresses, setup_logging() runs before TECHNEWS_DATA_DIR exists at
+    all and falls back to data_dir()'s default of ~/.technews -- this
+    keeps that fallback sandboxed instead of writing into the real
+    developer machine's home directory while this test is proving the bug
+    exists.
+    """
+    monkeypatch.delenv("TECHNEWS_DATA_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "fake-home")
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    data_dir = tmp_path / "from-dotenv"
+    (project_root / ".env").write_text(f"TECHNEWS_DATA_DIR={data_dir}\n")
+    monkeypatch.setattr(main_module, "PROJECT_ROOT", project_root)
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(CONFIG)
+
+    import collectors
+
+    monkeypatch.setitem(collectors.STRATEGIES, "feed", lambda s, sess: [])
+
+    from models import history_file, log, log_file
+
+    try:
+        assert main(["--config", str(config_path), "--dry-run"]) == 0
+
+        assert log_file().parent == data_dir
+        assert history_file().parent == data_dir
+        assert log_file().exists()
+    finally:
+        for handler in log.handlers:
+            handler.close()
+        log.handlers.clear()
+
+
 def test_dry_run_needs_no_telegram_secrets(config_file, monkeypatch):
     """A dry run must work before the user has a bot token."""
     monkeypatch.delenv("TECHNEWS_TELEGRAM_BOT_TOKEN", raising=False)
