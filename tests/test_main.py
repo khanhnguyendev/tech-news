@@ -71,6 +71,32 @@ def test_reset_deletes_history_and_exits_0(config_file, tmp_path, monkeypatch):
     assert not history.exists()
 
 
+def test_reset_tells_the_user_to_init_before_the_next_real_run(
+    config_file, tmp_path, capsys
+):
+    """A bare --reset followed by an ordinary run would flood the chat with
+    every currently visible item (bounded only by the normal limits). The
+    reminder is the only guard against that happening by accident."""
+    history = Path(tmp_path / "data") / "history.json"
+    history.parent.mkdir(parents=True, exist_ok=True)
+    history.write_text(json.dumps({"version": 1, "seen": [], "last_run": None}))
+    main(["--config", str(config_file), "--reset", "--yes"])
+    assert "--init" in capsys.readouterr().out
+
+
+def test_reset_without_confirmation_prints_no_init_reminder(
+    config_file, tmp_path, monkeypatch, capsys
+):
+    """Cancelling --reset leaves history untouched, so there is nothing to
+    re-seed and the reminder must not appear."""
+    history = Path(tmp_path / "data") / "history.json"
+    history.parent.mkdir(parents=True, exist_ok=True)
+    history.write_text("{}")
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    main(["--config", str(config_file), "--reset"])
+    assert "--init" not in capsys.readouterr().out
+
+
 def test_reset_without_yes_asks_for_confirmation(config_file, tmp_path, monkeypatch):
     history = Path(tmp_path / "data") / "history.json"
     history.parent.mkdir(parents=True, exist_ok=True)

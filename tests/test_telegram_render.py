@@ -190,6 +190,55 @@ SIZE_TABLE = [
 ]
 
 
+def test_failure_footer_appears_on_last_chunk_when_sources_failed():
+    articles = [make("one"), make("two")]
+    [chunk] = render_digest(articles, ["Security"], day=DAY, failed_count=2)
+    assert "2 sources failed" in chunk.html
+    assert "app.log" in chunk.html
+
+
+def test_failure_footer_uses_singular_for_one_source():
+    [chunk] = render_digest([make("one")], ["Security"], day=DAY, failed_count=1)
+    assert "1 source failed" in chunk.html
+
+
+def test_no_failure_footer_when_nothing_failed():
+    [chunk] = render_digest([make("one")], ["Security"], day=DAY, failed_count=0)
+    assert "failed" not in chunk.html.lower()
+    assert "app.log" not in chunk.html
+
+
+def test_no_failure_footer_when_there_are_no_articles():
+    """render_digest([]) must keep returning no chunks at all -- a failure
+    footer is never reason enough to send an otherwise-empty digest."""
+    assert render_digest([], ["Security"], day=DAY, failed_count=3) == []
+
+
+def test_failure_footer_is_appended_to_the_last_chunk_when_it_fits():
+    articles = [make("Headline", link="https://x.test/only")]
+    # 123-char base chunk + "\n\n" + a 45-char footer for failed_count=5 is
+    # exactly 170 chars -- fits with room to spare at this limit.
+    chunks = render_digest(articles, ["Security"], day=DAY, limit=200, failed_count=5)
+    assert len(chunks) == 1
+    assert "5 sources failed" in chunks[0].html
+    assert len(chunks[0].html) <= 200
+
+
+def test_failure_footer_gets_its_own_chunk_when_it_would_overflow_the_last_one():
+    articles = [make("Headline", link="https://x.test/only")]
+    # Same 123-char base chunk, but a limit too tight for the 47-char
+    # addition ("\n\n" + the 45-char footer) to land in the same chunk.
+    chunks = render_digest(articles, ["Security"], day=DAY, limit=140, failed_count=5)
+    assert len(chunks) == 2
+    assert "failed" not in chunks[0].html.lower()
+    assert "5 sources failed" in chunks[1].html
+    assert all(len(c.html) <= 140 for c in chunks)
+    # The footer-only chunk carries no article ids: it isn't tied to any
+    # specific article and must not affect delivery accounting.
+    assert chunks[1].article_ids == []
+    assert chunks[0].article_ids == [articles[0].id]
+
+
 def test_limit_and_ids_hold_across_a_fixed_table_of_category_sizes():
     for sizes in SIZE_TABLE:
         articles = [
@@ -205,6 +254,34 @@ def test_limit_and_ids_hold_across_a_fixed_table_of_category_sizes():
         chunks = render_digest(articles, list(sizes.keys()), day=DAY)
 
         assert all(len(c.html) <= MAX_MESSAGE_CHARS for c in chunks), sizes
+        delivered = [aid for c in chunks for aid in c.article_ids]
+        assert sorted(delivered) == sorted(a.id for a in articles), sizes
+        assert len(delivered) == len(set(delivered)), sizes
+
+
+def test_limit_holds_across_the_size_table_with_a_failure_footer_present():
+    """Same table as above, but with failed_count > 0 on every shape: a
+    footer landing on a chunk that's already near the limit must never be
+    the thing that pushes it over, regardless of how the rest of the
+    digest happened to split.
+    """
+    for sizes in SIZE_TABLE:
+        articles = [
+            make(
+                "Headline %d" % i,
+                category=category,
+                link="https://x.test/%s/%03d" % (category, i),
+            )
+            for category, count in sizes.items()
+            for i in range(count)
+        ]
+
+        chunks = render_digest(articles, list(sizes.keys()), day=DAY, failed_count=3)
+
+        assert all(len(c.html) <= MAX_MESSAGE_CHARS for c in chunks), sizes
+        assert "3 sources failed" in chunks[-1].html, sizes
+        # Every article must still be delivered exactly once; the footer
+        # chunk (if any) contributes no article ids of its own.
         delivered = [aid for c in chunks for aid in c.article_ids]
         assert sorted(delivered) == sorted(a.id for a in articles), sizes
         assert len(delivered) == len(set(delivered)), sizes

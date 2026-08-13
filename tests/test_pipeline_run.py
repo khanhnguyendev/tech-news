@@ -150,6 +150,31 @@ def test_all_sources_failing_exits_3_and_persists_nothing(tmp_path, config, stub
     assert not path.exists()
 
 
+def test_partial_source_failure_surfaces_in_the_digest_footer(tmp_path, config, monkeypatch):
+    """One source failing (not all of them, so this isn't the exit-3 path)
+    must still be visible somewhere other than the log: run() is expected
+    to forward collect_all's failed_count into render_digest so the
+    footer described in dispatchers/telegram.py actually appears."""
+    config["sources"].append(
+        {"name": "B", "category": "C", "type": "feed", "url": "https://b.test"}
+    )
+
+    def strategy(source, session):
+        if source["name"] == "B":
+            raise RuntimeError("boom")
+        return [article("one")]
+
+    monkeypatch.setitem(collectors.STRATEGIES, "feed", strategy)
+
+    path = tmp_path / "history.json"
+    recorder = Recorder()
+    outcome = run(config, session=None, now=NOW, state_path=path, dispatch_fn=recorder)
+
+    assert outcome.exit_code == 0
+    assert recorder.chunks is not None
+    assert any("1 source failed" in c.html for c in recorder.chunks)
+
+
 def test_all_sources_disabled_exits_zero_not_three(tmp_path, config):
     """attempted == 0 (nothing configured to run) must not be reported as an outage."""
     path = tmp_path / "history.json"

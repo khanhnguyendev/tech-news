@@ -49,6 +49,11 @@ def _ordered_categories(articles: list[Article], category_order: list[str]) -> l
     return ordered
 
 
+def _failure_footer(failed_count: int) -> str:
+    plural = "" if failed_count == 1 else "s"
+    return f"⚠️ {failed_count} source{plural} failed — see ~/.technews/app.log"
+
+
 def render_digest(
     articles: list[Article],
     category_order: list[str],
@@ -56,11 +61,19 @@ def render_digest(
     day: date,
     include_blurb: bool = False,
     limit: int = MAX_MESSAGE_CHARS,
+    failed_count: int = 0,
 ) -> list[Chunk]:
     """Render the digest into chunks that each fit one Telegram message.
 
     Splits at category boundaries, then at item boundaries when a single
     category is too large. Never splits inside a tag.
+
+    When `failed_count` is greater than zero, a footer line naming the
+    count is appended to the last chunk -- or, if it wouldn't fit there
+    without breaking the size limit, given a chunk of its own. This is the
+    only place a source collection failure becomes visible outside the log
+    file: the whole point is that an unattended run with a silently broken
+    scraper still shows up somewhere the reader actually looks.
     """
     if not articles:
         return []
@@ -142,6 +155,16 @@ def render_digest(
             continued = True
 
     flush()
+
+    if failed_count > 0 and chunks:
+        footer = _failure_footer(failed_count)
+        last = chunks[-1]
+        # +2 for the "\n\n" separator, same convention as add_block().
+        if len(last.html) + len(footer) + 2 <= limit:
+            last.html = f"{last.html}\n\n{footer}"
+        else:
+            chunks.append(Chunk(footer, []))
+
     return chunks
 
 

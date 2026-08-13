@@ -181,6 +181,7 @@ def run(
         category_order(config),
         day=now.date(),
         include_blurb=bool(telegram_cfg.get("include_blurb", False)),
+        failed_count=collected.failed_count,
     )
 
     if dry_run:

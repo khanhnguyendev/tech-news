@@ -70,6 +70,10 @@ def _reset(assume_yes: bool) -> int:
             return 0
     path.unlink()
     print(f"Deleted {path}.")
+    print(
+        "Run 'python3 main.py --init' before your next real run, or "
+        "every item currently visible across all sources will be sent at once."
+    )
     return 0
 
 
