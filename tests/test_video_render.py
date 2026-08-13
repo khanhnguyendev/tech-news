@@ -124,6 +124,7 @@ def test_ffmpeg_args_with_music_add_audio_and_fade(tmp_path):
     # trailing slides. -t alone gives the correct, non-truncating behavior.
     assert "-t" in args
     assert "11.000" in args
+    assert "-shortest" not in args
 
 
 def test_generate_returns_none_when_ffmpeg_is_absent(tmp_path, monkeypatch, caplog):
@@ -154,6 +155,30 @@ def test_generate_writes_timeline_artifacts_and_calls_ffmpeg(tmp_path, monkeypat
     assert (tmp_path / "recap.json").exists()
     assert (tmp_path / "recap.srt").exists()
     assert len(calls) == 1
+
+
+def test_generate_falls_back_to_silent_when_music_file_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    calls = []
+
+    def fake_runner(args, **kwargs):
+        calls.append(args)
+        Path(args[-1]).write_bytes(b"fake mp4")
+        return subprocess.CompletedProcess(args, 0, b"", b"")
+
+    missing_music = tmp_path / "does-not-exist.mp3"
+    result = generate(
+        [make("a")],
+        cfg(music=str(missing_music)),
+        tmp_path,
+        day=DAY,
+        runner=fake_runner,
+    )
+    assert result == tmp_path / "recap.mp4"
+    assert len(calls) == 1
+    joined = " ".join(str(a) for a in calls[0])
+    assert str(missing_music) not in joined
+    assert "afade" not in joined
 
 
 def test_generate_respects_max_slides(tmp_path, monkeypatch):

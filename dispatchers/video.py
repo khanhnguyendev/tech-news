@@ -126,6 +126,11 @@ def load_font(path: str | Path, size: int):
 
 
 def wrap_text(text: str, font, max_width: int, draw) -> list[str]:
+    # A single word wider than max_width is placed on its own line
+    # unconditionally rather than being hyphen-broken; real headlines are
+    # made of ordinary space-separated words, so this is not expected in
+    # practice, but it means a pathological single token can render past
+    # the slide's margin.
     words = text.split()
     if not words:
         return [""]
