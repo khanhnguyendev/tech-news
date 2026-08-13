@@ -75,3 +75,12 @@ def test_fetch_gives_up_after_one_retry():
 def test_fetch_json_parses_body():
     session = FakeSession([FakeResponse(json_data=[{"tag_name": "v1"}])])
     assert fetch_json(session, "https://api.test/releases")[0]["tag_name"] == "v1"
+
+
+def test_fetch_failure_preserves_the_underlying_cause():
+    original = requests.ConnectionError("boom")
+    session = FakeSession([original, requests.ConnectionError("boom again")])
+    with pytest.raises(FetchError) as excinfo:
+        fetch(session, "https://x.test/rss")
+    assert excinfo.value.__cause__ is not None
+    assert isinstance(excinfo.value.__cause__, requests.RequestException)

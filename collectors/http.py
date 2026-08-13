@@ -43,7 +43,7 @@ def _get(session, url: str, headers: dict | None):
         if attempt == 1:
             log.debug("Retrying %s after error: %s", url, last_error)
             time.sleep(RETRY_DELAY_SECONDS)
-    raise FetchError(f"{url} failed after retry: {last_error}")
+    raise FetchError(f"{url} failed after retry: {last_error}") from last_error
 
 
 def fetch(session, url: str, *, headers: dict | None = None) -> bytes:
