@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import collectors
+import pipeline
 from dispatchers.telegram import TelegramError
 from models import Article
 from pipeline import run
@@ -290,3 +291,28 @@ def test_extras_failure_does_not_change_exit_code(tmp_path, config, stub_collect
         extras_fn=boom,
     )
     assert outcome.exit_code == 0
+
+
+def test_default_dispatch_forwards_token_chat_and_preview_flag(monkeypatch):
+    """No test at all exercised _default_dispatch before this: a swapped
+    token/chat_id argument, or a dropped disable_preview flag, would have
+    sailed through review unnoticed. Stub telegram.dispatch and check what
+    it actually receives."""
+    monkeypatch.setenv("TECHNEWS_TELEGRAM_BOT_TOKEN", "tok-123")
+    monkeypatch.setenv("TECHNEWS_TELEGRAM_CHAT_ID", "chat-456")
+
+    calls = []
+
+    def fake_dispatch(session, token, chat_id, chunks, *, disable_preview=True):
+        calls.append((session, token, chat_id, chunks, disable_preview))
+        return (["delivered-id"], None)
+
+    monkeypatch.setattr(pipeline.telegram, "dispatch", fake_dispatch)
+
+    session = object()
+    config = {"telegram": {"disable_web_page_preview": False}}
+    dispatch_fn = pipeline._default_dispatch(session, config)
+    result = dispatch_fn(["chunk-a", "chunk-b"])
+
+    assert calls == [(session, "tok-123", "chat-456", ["chunk-a", "chunk-b"], False)]
+    assert result == (["delivered-id"], None)
