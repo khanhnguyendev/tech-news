@@ -253,6 +253,34 @@ def test_init_respects_dry_run(tmp_path, config, stub_collect):
     assert not path.exists()
 
 
+def test_init_with_only_does_not_advance_last_run(tmp_path, config, stub_collect):
+    """--init --only NAME must seed that source's ids without moving the
+    global last_run. Advancing it would gate out everything the other
+    sources published since the last real run, permanently — the same
+    defect already fixed on the delivery and empty-digest paths."""
+    path = tmp_path / "history.json"
+    previous = NOW - timedelta(days=1)
+    save_state(State(last_run=previous, seen=[]), path)
+    stub_collect["articles"] = [article("a"), article("b")]
+
+    recorder = Recorder()
+    outcome = run(
+        config,
+        session=None,
+        now=NOW,
+        state_path=path,
+        init=True,
+        only="A",
+        dispatch_fn=recorder,
+    )
+
+    assert outcome.exit_code == 0
+    assert recorder.chunks is None
+    saved = load_state(path)
+    assert len(saved.seen) == 2, "the named source's ids are still seeded"
+    assert saved.last_run == previous, "last_run must not move on --init --only"
+
+
 def test_stage_order_is_dedup_gate_then_limits(tmp_path, config, stub_collect):
     """Pin the fixed stage order: dedup, then gate, then limits.
 
