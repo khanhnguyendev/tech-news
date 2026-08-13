@@ -137,3 +137,74 @@ def test_header_survives_when_the_first_category_forces_a_split():
     assert len(chunks) > 1
     assert "13 Aug 2026" in chunks[0].html
     assert sum("13 Aug 2026" in c.html for c in chunks) == 1
+
+
+def test_second_category_split_accounts_for_leftover_room():
+    """The item-split budget (`limit - current_len - 2`) is recomputed from
+    the live buffer, not a flat `limit - 2`, precisely so a category that
+    does NOT fill a chunk still leaves its mark on the budget of whatever
+    splits after it. This is the property the header-carry-forward fix
+    depends on generally (the header is just the first thing that can
+    leave leftover room); with only single-category tests in the suite,
+    a future "simplification" back to a flat per-category budget would
+    silently break this and go undetected.
+
+    Alpha is small and shares the first chunk with the header. Beta is
+    large enough to force a split. If the budget ignored Alpha's (and the
+    header's) leftover room, Beta's first sub-block would be sized as if
+    it had the whole message to itself and the merge would overflow —
+    exactly the class of bug already fixed for the header. Asserting that
+    chunk[0] contains articles from *both* categories confirms the budget
+    carry-over is genuinely exercised, not incidentally satisfied.
+    """
+    alpha = [make("H", category="Alpha", link="https://x.test/alpha/%03d" % i) for i in range(5)]
+    beta = [make("H", category="Beta", link="https://x.test/beta/%03d" % i) for i in range(100)]
+    articles = alpha + beta
+
+    chunks = render_digest(articles, ["Alpha", "Beta"], day=DAY)
+
+    assert len(chunks) > 1
+    first_categories = {"alpha" if "/alpha/" in aid else "beta" for aid in chunks[0].article_ids}
+    assert first_categories == {"alpha", "beta"}
+
+    assert all(len(c.html) <= MAX_MESSAGE_CHARS for c in chunks)
+    delivered = [aid for c in chunks for aid in c.article_ids]
+    assert sorted(delivered) == sorted(a.id for a in articles)
+    assert len(delivered) == len(set(delivered))
+
+
+# A fixed table of size combinations, deterministic (no randomness, no
+# hash-derived lengths) so it can never flake. This is a compact, persisted
+# stand-in for the ad hoc randomized trials used to validate the splitting
+# algorithm during development: across every shape below -- no split, one
+# category forced to split, several categories of mixed size, a single
+# article -- every chunk must respect the limit and every article must be
+# delivered exactly once.
+SIZE_TABLE = [
+    {"Alpha": 1},
+    {"Alpha": 3, "Beta": 3},
+    {"Security": 120},
+    {"Alpha": 5, "Beta": 100},
+    {"Alpha": 40, "Beta": 40, "Gamma": 40},
+    {"Alpha": 200, "Beta": 1, "Gamma": 50},
+]
+
+
+def test_limit_and_ids_hold_across_a_fixed_table_of_category_sizes():
+    for sizes in SIZE_TABLE:
+        articles = [
+            make(
+                "Headline %d" % i,
+                category=category,
+                link="https://x.test/%s/%03d" % (category, i),
+            )
+            for category, count in sizes.items()
+            for i in range(count)
+        ]
+
+        chunks = render_digest(articles, list(sizes.keys()), day=DAY)
+
+        assert all(len(c.html) <= MAX_MESSAGE_CHARS for c in chunks), sizes
+        delivered = [aid for c in chunks for aid in c.article_ids]
+        assert sorted(delivered) == sorted(a.id for a in articles), sizes
+        assert len(delivered) == len(set(delivered)), sizes

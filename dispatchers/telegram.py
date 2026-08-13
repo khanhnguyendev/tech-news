@@ -85,6 +85,13 @@ def render_digest(
 
     def add_block(block: str, ids: list[str]) -> None:
         nonlocal current_len
+        # +2 assumes a "\n\n" separator precedes this block. That's true
+        # whenever current_lines already has content, but also charged for
+        # the first block right after a flush (where no separator is
+        # actually joined in). current_len therefore runs up to 2 chars
+        # higher than len("\n\n".join(current_lines)) in that case -- a
+        # conservative overestimate that never causes overflow, just a
+        # slightly earlier flush than strictly necessary.
         addition = len(block) + 2
         if current_lines and current_len + addition > limit:
             flush()
@@ -114,6 +121,12 @@ def render_digest(
             while index < len(in_category):
                 item = items[index]
                 addition = len(item) + 1
+                # The first item of a sub-block is always let in regardless
+                # of budget, to guarantee progress. If a single rendered
+                # item alone is longer than the limit (an ~4000-char
+                # headline+link), its chunk will exceed MAX_MESSAGE_CHARS.
+                # Inherited from the reference design; not worth guarding
+                # against for a headline digest.
                 if sub_ids and sub_len + addition > budget:
                     break
                 sub_lines.append(item)
