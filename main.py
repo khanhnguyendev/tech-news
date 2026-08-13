@@ -17,8 +17,9 @@ from pathlib import Path
 
 import pipeline
 from collectors.http import make_session
-from models import history_file, log, setup_logging
-from settings import ConfigError, load_config, load_env
+from dispatchers import make_extras
+from models import data_dir, history_file, log, setup_logging
+from settings import ConfigError, get_secret, load_config, load_env
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PROJECT_ROOT / "config.yaml"
@@ -92,15 +93,33 @@ def main(argv: list[str] | None = None) -> int:
         return _reset(args.yes)
 
     session = make_session()
+    now = datetime.now(timezone.utc)
+
+    extras_fn = None
+    if not args.dry_run and not args.init:
+        try:
+            extras_fn = make_extras(
+                session,
+                config,
+                day=now.date(),
+                token=get_secret("TECHNEWS_TELEGRAM_BOT_TOKEN"),
+                chat_id=get_secret("TECHNEWS_TELEGRAM_CHAT_ID"),
+                data_dir=data_dir(),
+            )
+        except ConfigError as exc:
+            print(f"Configuration error: {exc}", file=sys.stderr)
+            return 1
+
     try:
         outcome = pipeline.run(
             config,
             session=session,
-            now=datetime.now(timezone.utc),
+            now=now,
             dry_run=args.dry_run,
             init=args.init,
             only=args.only,
             state_path=history_file(),
+            extras_fn=extras_fn,
         )
     except ConfigError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)

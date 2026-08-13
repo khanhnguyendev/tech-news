@@ -57,6 +57,8 @@ def test_invalid_config_exits_1(tmp_path, capsys):
 def test_exit_code_comes_from_pipeline(config_file, monkeypatch):
     from pipeline import RunOutcome
 
+    monkeypatch.setenv("TECHNEWS_TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TECHNEWS_TELEGRAM_CHAT_ID", "chat")
     monkeypatch.setattr(
         main_module.pipeline, "run", lambda *a, **k: RunOutcome(2, [], [])
     )
