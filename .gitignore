@@ -5,3 +5,7 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# Raw payloads saved by scripts/verify_sources.py on each manual run --
+# a local debugging aid, not something to diff/commit every time it runs.
+tests/fixtures/live/

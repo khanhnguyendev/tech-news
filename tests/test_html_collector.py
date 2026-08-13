@@ -2,8 +2,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from collectors.html_scrape import collect, parse_time_attribute
+from settings import load_config
 
 FIXTURES = Path(__file__).parent / "fixtures"
+CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
 UTC = timezone.utc
 
 
@@ -98,6 +100,23 @@ def test_missing_required_selector_raises():
         del selectors[missing]
         with pytest.raises(ValueError, match=f"selectors.{missing}"):
             collect(source(selectors=selectors), FixtureSession("events_page.html"))
+
+
+def test_real_events_page_yields_at_least_one_article():
+    """tests/fixtures/events_page_real.html is a live snapshot of
+    https://www.anthropic.com/events, saved by scripts/verify_sources.py on
+    2026-08-13. It is the real-world contract for the "Anthropic Events"
+    selectors declared in the shipped config.yaml, alongside the synthetic
+    fixture exercised by the tests above -- if Anthropic reshapes the page,
+    this test (not just the synthetic one) should fail.
+    """
+    config = load_config(CONFIG_PATH)
+    events_source = next(
+        s for s in config["sources"] if s["name"] == "Anthropic Events"
+    )
+    articles = collect(events_source, FixtureSession("events_page_real.html"))
+    assert len(articles) >= 1
+    assert all(a.headline and a.link for a in articles)
 
 
 def test_parse_time_attribute_handles_offsets_and_junk():

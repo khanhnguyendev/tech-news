@@ -1,0 +1,175 @@
+telegram:
+  include_blurb: false
+  disable_web_page_preview: true
+  send_when_empty: false
+
+freshness:
+  overlap_hours: 6
+  first_run_lookback_hours: 24
+
+limits:
+  max_per_source: 10
+  max_total: 60
+
+history:
+  max_entries: 800
+
+video:
+  enabled: true
+  seconds_per_slide: 4
+  max_slides: 20
+  resolution: [1080, 1920]
+  font: /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+  music: assets/music.mp3
+  send_to_telegram: true
+
+site:
+  enabled: true
+  output_dir: ~/.technews/site
+  keep_days: 30
+
+sources:
+  # Anthropic ---------------------------------------------------------------
+  # Anthropic no longer publishes an RSS/Atom feed for /news (rss.xml, feed.xml,
+  # and every other guessed path 404; no <link rel="alternate"> feed is
+  # advertised on the page either -- verified live on 2026-08-13). The page is
+  # server-rendered, so it can still be scraped, but the listing carries no
+  # machine-readable per-item timestamp (the <time> element has no `datetime`
+  # attribute, only display text like "Aug 7, 2026"). Per the design's own
+  # rule, published=None is dropped by the default gate, which would silently
+  # empty this source forever. gate: new_only relies on URL dedup instead --
+  # the same mechanism the design already prescribes for Anthropic Events --
+  # so real announcements still reach the digest exactly once.
+  - name: "Anthropic News"
+    category: "Anthropic"
+    type: html
+    gate: new_only
+    url: "https://www.anthropic.com/news"
+    selectors:
+      item: "ul.PublicationList-module-scss-module__KxYrHG__list > li"
+      title: "span.PublicationList-module-scss-module__KxYrHG__title"
+      link: "a.PublicationList-module-scss-module__KxYrHG__listItem"
+
+  # Same situation as Anthropic News: no RSS feed exists for /engineering
+  # (verified 404), and the listing page has no machine-readable date at all.
+  - name: "Anthropic Engineering"
+    category: "Anthropic"
+    type: html
+    gate: new_only
+    url: "https://www.anthropic.com/engineering"
+    selectors:
+      item: "article.ArticleList-module-scss-module___tpu-a__article"
+      title: "h3.headline-4"
+      link: "a.ArticleList-module-scss-module___tpu-a__cardLink"
+
+  # anthropics/claude-code has no dedicated changelog feed either; the
+  # official GitHub Releases Atom feed is the accurate, maintained substitute.
+  - name: "Claude Code Changelog"
+    category: "Anthropic"
+    type: feed
+    url: "https://github.com/anthropics/claude-code/releases.atom"
+
+  - name: "Anthropic Courses"
+    category: "Anthropic"
+    type: feed
+    url: "https://github.com/anthropics/courses/commits/master.atom"
+
+  - name: "Anthropic Events"
+    category: "Anthropic"
+    type: html
+    gate: new_only
+    url: "https://www.anthropic.com/events"
+    selectors:
+      item: "div.event_list_item.w-dyn-item"
+      title: "div.cc-event"
+      link: "a.g_clickable_link.w-inline-block"
+      date: "[fs-list-field='date']"
+
+  # YouTube -------------------------------------------------------------------
+  - name: "Fireship"
+    category: "YouTube"
+    type: feed
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA"
+  - name: "AI Explained"
+    category: "YouTube"
+    type: feed
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCNJ1Ymd5yFuUPtn21xtRbbw"
+  - name: "Matt Wolfe"
+    category: "YouTube"
+    type: feed
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UChpleBmo18P08aKCIgti38g"
+  - name: "Matthew Berman"
+    category: "YouTube"
+    type: feed
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCawZsQWqfGSbCI5yjkdVkTA"
+  - name: "Two Minute Papers"
+    category: "YouTube"
+    type: feed
+    url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCbfYPyITQ-7l4upoX8nvctg"
+
+  # Electron / Releases ---------------------------------------------------
+  - name: "Electron Blog"
+    category: "Electron"
+    type: feed
+    url: "https://www.electronjs.org/blog/rss.xml"
+  - name: "Electron Releases"
+    category: "Releases"
+    type: github_release
+    repo: "electron/electron"
+    include_prereleases: false
+  - name: "Playwright"
+    category: "Releases"
+    type: github_release
+    repo: "microsoft/playwright"
+    include_prereleases: false
+
+  # Apple -----------------------------------------------------------------
+  - name: "Apple Developer News"
+    category: "Apple"
+    type: feed
+    url: "https://developer.apple.com/news/rss/news.rss"
+  - name: "Swift.org"
+    category: "Apple"
+    type: feed
+    url: "https://www.swift.org/atom.xml"
+
+  # Trending ----------------------------------------------------------------
+  # The community mirror's items carry no per-item pubDate (only a
+  # channel-level one) -- "trending" is a daily snapshot, not a publication
+  # event, so there is no timestamp to gate on in the first place. new_only
+  # relies on dedup alone, same rationale as the Anthropic sources above.
+  - name: "GitHub Trending"
+    category: "Trending"
+    type: feed
+    gate: new_only
+    url: "https://mshibanami.github.io/GitHubTrendingRSS/daily/all.xml"
+    keywords: []
+
+  # Security ----------------------------------------------------------------
+  - name: "The Hacker News"
+    category: "Security"
+    type: feed
+    url: "https://feeds.feedburner.com/TheHackersNews"
+  - name: "Bleeping Computer"
+    category: "Security"
+    type: feed
+    url: "https://www.bleepingcomputer.com/feed/"
+  - name: "Krebs on Security"
+    category: "Security"
+    type: feed
+    url: "https://krebsonsecurity.com/feed/"
+  - name: "Schneier on Security"
+    category: "Security"
+    type: feed
+    url: "https://www.schneier.com/feed/atom/"
+  - name: "SecurityWeek"
+    category: "Security"
+    type: feed
+    url: "https://www.securityweek.com/feed/"
+  # Google Project Zero migrated off Blogspot; the old
+  # googleprojectzero.blogspot.com feed now 301-redirects here. Using the
+  # canonical URL directly rather than relying on a redirect chain.
+  - name: "Google Project Zero"
+    category: "Security"
+    type: feed
+    url: "https://projectzero.google/feed.xml"
