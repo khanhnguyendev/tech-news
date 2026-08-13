@@ -278,6 +278,52 @@ def test_stage_order_is_dedup_gate_then_limits(tmp_path, config, stub_collect):
     assert delivered == ["https://x.test/new"]
 
 
+def test_only_delivers_but_does_not_advance_last_run(tmp_path, config, stub_collect):
+    """--only NAME is the diagnostic tool for one broken source, reached
+    for precisely when something else may already be wrong. A successful
+    --only run must still mark its own delivered ids as seen (so it isn't
+    re-sent later), but must not advance the global last_run -- doing so
+    would gate out everything the other 21 sources published between the
+    last real run and this one-source diagnostic run."""
+    path = tmp_path / "history.json"
+    previous = datetime(2026, 8, 12, 8, 0, tzinfo=UTC)
+    save_state(State(last_run=previous, seen=[]), path)
+
+    recorder = Recorder()
+    outcome = run(
+        config, session=None, now=NOW, state_path=path, only="A", dispatch_fn=recorder
+    )
+    assert outcome.exit_code == 0
+    saved = load_state(path)
+    assert saved.last_run == previous
+    assert set(saved.seen) == {"https://x.test/one", "https://x.test/two"}
+
+
+def test_only_with_nothing_new_does_not_advance_last_run(tmp_path, config, stub_collect):
+    """Same invariant, but through the empty-digest branch: everything the
+    single source has is already seen, so nothing is dispatched at all.
+    That branch has its own last_run write and needs the same --only
+    guard as the dispatch-success branch above."""
+    path = tmp_path / "history.json"
+    previous = datetime(2026, 8, 12, 8, 0, tzinfo=UTC)
+    save_state(
+        State(
+            last_run=previous,
+            seen=["https://x.test/one", "https://x.test/two"],
+        ),
+        path,
+    )
+
+    recorder = Recorder()
+    outcome = run(
+        config, session=None, now=NOW, state_path=path, only="A", dispatch_fn=recorder
+    )
+    assert outcome.exit_code == 0
+    assert recorder.chunks is None
+    saved = load_state(path)
+    assert saved.last_run == previous
+
+
 def test_extras_run_only_after_successful_delivery(tmp_path, config, stub_collect):
     path = tmp_path / "history.json"
     calls = []

@@ -172,7 +172,15 @@ def run(
     if not articles and not telegram_cfg.get("send_when_empty", False):
         log.info("Nothing new today; sending nothing")
         if not dry_run:
-            state.last_run = now
+            if only is None:
+                state.last_run = now
+            else:
+                log.info(
+                    "--only %s: leaving last_run at %s so the other sources "
+                    "are not gated out",
+                    only,
+                    state.last_run,
+                )
             persist()
         return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
 
@@ -197,7 +205,15 @@ def run(
 
     state.seen.extend(delivered)
     if error is None:
-        state.last_run = now
+        if only is None:
+            state.last_run = now
+        else:
+            log.info(
+                "--only %s: leaving last_run at %s so the other sources "
+                "are not gated out",
+                only,
+                state.last_run,
+            )
     else:
         log.error("Telegram delivery incomplete; last_run left at %s", state.last_run)
     persist()
