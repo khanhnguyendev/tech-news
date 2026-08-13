@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timezone
 
 from dispatchers.telegram import MAX_MESSAGE_CHARS, escape, render_digest
@@ -271,6 +272,53 @@ def test_failure_footer_gets_its_own_chunk_when_it_would_overflow_the_last_one()
     # specific article and must not affect delivery accounting.
     assert chunks[1].article_ids == []
     assert chunks[0].article_ids == [articles[0].id]
+
+
+def _headings_per_chunk(chunks):
+    """Category headings in each chunk, `(cont.)` suffix stripped."""
+    return [re.findall(r"<b>([^<]+)</b>", c.html) for c in chunks]
+
+
+def test_no_chunk_repeats_a_category_heading():
+    """A chunk must never carry the same category heading twice.
+
+    The split loop sizes a sub-block against the live buffer, but add_block
+    may then flush it into a fresh chunk where that budget no longer
+    applies. When the buffer is nearly full the sub-block is a single
+    forced item, so the fresh chunk opens with a "(cont.)" heading and one
+    stray article, immediately followed by a second "(cont.)" heading with
+    the rest. Observed in a real digest before this was fixed.
+
+    Links are fixed-width rather than `make`'s hash-derived default so the
+    boundary math is deterministic across runs — under hash randomization
+    the item lengths drift and the buffer may never reach the nearly-full
+    state that triggers the defect.
+    """
+    articles = [
+        make(
+            f"Some reasonably long Anthropic headline number {i} about models",
+            category="Anthropic",
+            source="Anthropic News",
+            link="https://x.test/anthropic/%03d" % i,
+        )
+        for i in range(30)
+    ] + [
+        make(
+            f"Another security headline of realistic length number {i}",
+            category="Security",
+            source="SecurityWeek",
+            link="https://x.test/security/%03d" % i,
+        )
+        for i in range(30)
+    ]
+
+    chunks = render_digest(articles, ["Anthropic", "Security"], day=DAY)
+
+    assert len(chunks) > 1, "input must actually split, or this proves nothing"
+    for position, headings in enumerate(_headings_per_chunk(chunks)):
+        assert len(headings) == len(set(headings)), (
+            f"chunk {position} repeats a heading: {headings}"
+        )
 
 
 def test_limit_and_ids_hold_across_a_fixed_table_of_category_sizes():
