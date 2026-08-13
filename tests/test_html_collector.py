@@ -53,6 +53,7 @@ def test_extracts_one_article_per_item():
 
 def test_relative_links_are_resolved_against_the_page_url():
     articles = collect(source(), FixtureSession("events_page.html"))
+    # Relative path href should be joined with the page URL
     assert articles[0].link == "https://www.anthropic.com/events/dev-day-2026"
 
 
@@ -85,10 +86,25 @@ def test_no_matching_items_raises():
         collect(bad, FixtureSession("events_page.html"))
 
 
+def test_missing_required_selector_raises():
+    import pytest
+
+    for missing in ("item", "title", "link"):
+        selectors = {
+            "item": "li.event-card",
+            "title": "h3.event-title",
+            "link": "a.event-link",
+        }
+        del selectors[missing]
+        with pytest.raises(ValueError, match=f"selectors.{missing}"):
+            collect(source(selectors=selectors), FixtureSession("events_page.html"))
+
+
 def test_parse_time_attribute_handles_offsets_and_junk():
     assert parse_time_attribute("2026-09-15T17:00:00+02:00") == datetime(
         2026, 9, 15, 15, 0, tzinfo=UTC
     )
-    assert parse_time_attribute("2026-09-15") is not None
+    # Date without time defaults to midnight UTC
+    assert parse_time_attribute("2026-09-15") == datetime(2026, 9, 15, 0, 0, tzinfo=UTC)
     assert parse_time_attribute("TBA") is None
     assert parse_time_attribute("") is None
