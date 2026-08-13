@@ -699,6 +699,17 @@ strategy is one module plus a registry entry, a new output is one module in
 
 - Additional dispatch targets: Slack, Discord, email, desktop notifications.
 - Additional collectors: Hacker News front page, ArXiv daily, Product Hunt.
+- Per-source `last_run`. Today `last_run` is a single global cutoff, so
+  articles dropped by `max_per_source`/`max_total`, or from a source that
+  failed to collect on a given run, are never retried: they aren't marked
+  seen, but the next run's freshness cutoff has already moved past them.
+  A per-source `last_run` would let each source's window hold at the point
+  it was last successfully and completely delivered, rather than at the
+  global run time, so truncated or failed items get a real chance to be
+  delivered on a later run instead of silently aging out. This is a
+  deliberate deferral, not an oversight: it interacts with the freshness
+  gate, the limits stage, and state persistence closely enough to need its
+  own design pass, not a fix-wave patch.
 - Narration: the `recap.json` timeline is already the input a TTS step would
   need.
 - LLM-generated executive summary of the day's items.
