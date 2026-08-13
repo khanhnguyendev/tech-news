@@ -207,6 +207,51 @@ def test_init_seeds_everything_without_sending(tmp_path, config, stub_collect):
     assert saved.last_run == NOW
 
 
+def test_init_respects_dry_run(tmp_path, config, stub_collect):
+    """--init --dry-run must persist nothing, matching rule 4 exactly like
+    the empty-digest path already does. Regression for a defect where the
+    init branch called save_state unconditionally."""
+    path = tmp_path / "history.json"
+    recorder = Recorder()
+    outcome = run(
+        config,
+        session=None,
+        now=NOW,
+        state_path=path,
+        init=True,
+        dry_run=True,
+        dispatch_fn=recorder,
+    )
+    assert outcome.exit_code == 0
+    assert recorder.chunks is None
+    assert not path.exists()
+
+
+def test_stage_order_is_dedup_gate_then_limits(tmp_path, config, stub_collect):
+    """Pin the fixed stage order: dedup, then gate, then limits.
+
+    If limits ran before dedup, the per-source cap (max_per_source=1 here)
+    would spend its one slot on the already-seen, newer article and drop
+    the fresh one -- silently losing it instead of the seen one dedup
+    should have removed. Both articles are well within the freshness
+    cutoff, so this isolates the dedup/limits ordering specifically.
+    """
+    path = tmp_path / "history.json"
+    save_state(
+        State(last_run=NOW - timedelta(hours=1), seen=["https://x.test/seen"]), path
+    )
+    config["limits"]["max_per_source"] = 1
+    stub_collect["articles"] = [
+        article("seen", hours_ago=1),  # newest, but already delivered
+        article("new", hours_ago=2),  # older, but never delivered
+    ]
+    recorder = Recorder()
+    run(config, session=None, now=NOW, state_path=path, dispatch_fn=recorder)
+    assert recorder.chunks is not None, "dedup must run before limits"
+    delivered = [i for c in recorder.chunks for i in c.article_ids]
+    assert delivered == ["https://x.test/new"]
+
+
 def test_extras_run_only_after_successful_delivery(tmp_path, config, stub_collect):
     path = tmp_path / "history.json"
     calls = []

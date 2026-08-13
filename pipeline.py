@@ -1,4 +1,6 @@
-"""Pipeline stages. Everything here is pure and independently testable."""
+"""Pipeline stages, plus run(), the orchestrator. The stages above run()
+are pure and independently testable; run() itself does file I/O and
+network dispatch."""
 
 from __future__ import annotations
 
@@ -125,6 +127,11 @@ def run(
     history_cfg = config.get("history", {})
 
     state = load_state(state_path)
+    max_entries = int(history_cfg.get("max_entries", 800))
+
+    def persist() -> None:
+        save_state(state, state_path, max_entries)
+
     cutoff = freshness_cutoff(
         state,
         now,
@@ -141,9 +148,15 @@ def run(
         return RunOutcome(exit_code=3, articles=[], delivered_ids=[])
 
     if init:
+        if dry_run:
+            log.info(
+                "Dry run: would seed history with %d id(s); nothing persisted",
+                len(collected.articles),
+            )
+            return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
         state.seen.extend(a.id for a in collected.articles)
         state.last_run = now
-        save_state(state, state_path, int(history_cfg.get("max_entries", 800)))
+        persist()
         log.info("Initialized history with %d id(s)", len(collected.articles))
         return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
 
@@ -160,7 +173,7 @@ def run(
         log.info("Nothing new today; sending nothing")
         if not dry_run:
             state.last_run = now
-            save_state(state, state_path, int(history_cfg.get("max_entries", 800)))
+            persist()
         return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
 
     chunks = telegram.render_digest(
@@ -186,7 +199,7 @@ def run(
         state.last_run = now
     else:
         log.error("Telegram delivery incomplete; last_run left at %s", state.last_run)
-    save_state(state, state_path, int(history_cfg.get("max_entries", 800)))
+    persist()
 
     if error is not None:
         return RunOutcome(exit_code=2, articles=articles, delivered_ids=delivered)
