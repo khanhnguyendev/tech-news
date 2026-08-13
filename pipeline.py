@@ -155,7 +155,15 @@ def run(
             )
             return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
         state.seen.extend(a.id for a in collected.articles)
-        state.last_run = now
+        if only is None:
+            state.last_run = now
+        else:
+            log.info(
+                "--only %s: leaving last_run at %s so the other sources "
+                "are not gated out",
+                only,
+                state.last_run,
+            )
         persist()
         log.info("Initialized history with %d id(s)", len(collected.articles))
         return RunOutcome(exit_code=0, articles=[], delivered_ids=[])
