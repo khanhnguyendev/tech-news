@@ -54,10 +54,12 @@ def collect(source: dict, session) -> list[Article]:
         )
 
     articles: list[Article] = []
+    skipped = 0
     for entry in parsed.entries:
         link = entry.get("link")
         title = entry.get("title")
         if not link or not title:
+            skipped += 1
             log.warning("Skipping entry without link or title in %s", source["name"])
             continue
         published = _to_utc(
@@ -73,4 +75,11 @@ def collect(source: dict, session) -> list[Article]:
                 blurb=strip_html(entry.get("summary", "")),
             )
         )
+
+    if not articles and skipped:
+        raise ValueError(
+            f"Feed {source['name']} had {skipped} entry/entries but built 0 "
+            "articles from them (all missing link or title)"
+        )
+
     return articles

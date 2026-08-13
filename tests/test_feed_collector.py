@@ -84,6 +84,28 @@ def test_malformed_feed_with_entries_is_used(caplog):
     assert len(articles) == 1
 
 
+def test_entries_present_but_all_unusable_raises():
+    """A feed that parses fine and has entries, but where none of them
+    carry both a link and a title, must not look like a quiet, empty day
+    -- the page responded, but nothing in it was usable, which is a
+    collector break collect_all should count as a failure, not a success
+    with zero articles."""
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<rss version=\"2.0\"><channel>"
+        "<item><title>No link here</title></item>"
+        "<item><link>https://x.test/only-link</link></item>"
+        "</channel></rss>"
+    )
+
+    class RawSession:
+        def get(self, url, timeout=None, headers=None):
+            return _FakeResponse(xml.encode())
+
+    with pytest.raises(ValueError, match="0 articles"):
+        collect(source(), RawSession())
+
+
 def test_fetch_failure_propagates():
     with pytest.raises(FetchError):
         collect(source(), FixtureSession(error=__import__("requests").ConnectionError()))

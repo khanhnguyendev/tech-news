@@ -88,6 +88,27 @@ def test_no_matching_items_raises():
         collect(bad, FixtureSession("events_page.html"))
 
 
+def test_items_matched_but_all_skipped_raises():
+    """A page that responds normally, where the item selector still finds
+    the <li> cards but the title selector no longer matches anything
+    inside them (e.g. a Next.js CSS-module hash changed), must not look
+    like a quiet, empty day. Every item gets skipped with a warning, but
+    that is a scraper break -- the fix for Task 14's failure footer only
+    fires when collect_all sees a failed source, and returning [] here
+    would have counted as success."""
+    import pytest
+
+    bad = source(
+        selectors={
+            "item": "li.event-card",
+            "title": "h9.does-not-exist",
+            "link": "a.event-link",
+        }
+    )
+    with pytest.raises(ValueError, match="matched 2 item"):
+        collect(bad, FixtureSession("events_page.html"))
+
+
 def test_missing_required_selector_raises():
     import pytest
 

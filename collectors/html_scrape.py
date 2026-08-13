@@ -57,11 +57,13 @@ def collect(source: dict, session) -> list[Article]:
         )
 
     articles: list[Article] = []
+    skipped = 0
     for item in items:
         headline = _select_text(item, selectors["title"])
         anchor = item.select_one(selectors["link"])
         href = anchor.get("href") if anchor else None
         if not headline or not href:
+            skipped += 1
             log.warning("Skipping item without title or link in %s", source["name"])
             continue
 
@@ -83,4 +85,12 @@ def collect(source: dict, session) -> list[Article]:
                 blurb=_select_text(item, selectors.get("blurb"))[:BLURB_LIMIT],
             )
         )
+
+    if not articles and skipped:
+        raise ValueError(
+            f"Source {source['name']} matched {skipped} item(s) with selector "
+            f"{selectors['item']!r} but built 0 articles from them (title or "
+            "link selector likely broken)"
+        )
+
     return articles
