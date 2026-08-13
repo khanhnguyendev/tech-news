@@ -10,9 +10,37 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-DATA_DIR = Path(os.environ.get("TECHNEWS_DATA_DIR", Path.home() / ".technews"))
-HISTORY_FILE = DATA_DIR / "history.json"
-LOG_FILE = DATA_DIR / "app.log"
+
+def data_dir() -> Path:
+    """The data directory, resolved from TECHNEWS_DATA_DIR right now.
+
+    Call this (or history_file()/log_file()) instead of the DATA_DIR/
+    HISTORY_FILE/LOG_FILE constants below wherever the current environment
+    matters -- e.g. once per CLI invocation, or once per test. The module
+    constants are computed a single time, when this module is first
+    imported, and never change afterwards; that is fine for a short-lived
+    process but wrong inside a long-lived one (such as a test session)
+    where different callers want different data directories.
+    """
+    return Path(os.environ.get("TECHNEWS_DATA_DIR", str(Path.home() / ".technews")))
+
+
+def history_file() -> Path:
+    return data_dir() / "history.json"
+
+
+def log_file() -> Path:
+    return data_dir() / "app.log"
+
+
+# Bound once, at import time, from whatever TECHNEWS_DATA_DIR is set to at
+# that moment. Kept for backward compatibility with code that imports these
+# names directly (state.py's and pipeline.py's default arguments, in
+# particular). Prefer the data_dir()/history_file()/log_file() functions
+# above in anything that resolves the path at call time.
+DATA_DIR = data_dir()
+HISTORY_FILE = history_file()
+LOG_FILE = log_file()
 
 USER_AGENT = "TechNews/1.0 (+https://github.com/khanhnguyendev/tech-news)"
 HTTP_TIMEOUT = 20
@@ -59,14 +87,15 @@ class Article:
 
 def setup_logging(verbose: bool = False) -> None:
     """Configure a rotating file log plus stderr output."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    current_data_dir = data_dir()
+    current_data_dir.mkdir(parents=True, exist_ok=True)
     log.setLevel(logging.DEBUG if verbose else logging.INFO)
     log.handlers.clear()
 
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(message)s")
 
     file_handler = logging.handlers.RotatingFileHandler(
-        LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+        log_file(), maxBytes=1_000_000, backupCount=3, encoding="utf-8"
     )
     file_handler.setFormatter(fmt)
     log.addHandler(file_handler)

@@ -3,7 +3,7 @@
 
 Exit codes:
   0  success, including "nothing new today"
-  1  setup error (missing secret, unusable config)
+  1  setup error (missing secret, unusable config, PyYAML missing)
   2  Telegram delivery failed
   3  every attempted source failed
 """
@@ -11,35 +11,17 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pipeline
 from collectors.http import make_session
-from models import log, setup_logging
+from models import history_file, log, setup_logging
 from settings import ConfigError, load_config, load_env
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PROJECT_ROOT / "config.yaml"
-
-
-def _history_file() -> Path:
-    """The history file under the current TECHNEWS_DATA_DIR.
-
-    Deliberately re-read from os.environ on every call rather than taken
-    from models.HISTORY_FILE: that constant is computed once, the first
-    time models.py is imported, and never changes afterwards. In a real
-    process that is harmless (the env var is set once, before Python
-    starts). But it means a stale value inside a single long-lived
-    process -- which is exactly what happens across a pytest session,
-    where the module is imported once and many tests each want their own
-    TECHNEWS_DATA_DIR. Recomputing here keeps main.py honoring whatever
-    the environment says right now.
-    """
-    data_dir = Path(os.environ.get("TECHNEWS_DATA_DIR", str(Path.home() / ".technews")))
-    return data_dir / "history.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,17 +59,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _reset(assume_yes: bool) -> int:
-    history_file = _history_file()
-    if not history_file.exists():
-        print(f"No history file at {history_file}; nothing to reset.")
+    path = history_file()
+    if not path.exists():
+        print(f"No history file at {path}; nothing to reset.")
         return 0
     if not assume_yes:
-        answer = input(f"Delete {history_file}? [y/N] ").strip().lower()
+        answer = input(f"Delete {path}? [y/N] ").strip().lower()
         if answer not in ("y", "yes"):
             print("Cancelled.")
             return 0
-    history_file.unlink()
-    print(f"Deleted {history_file}.")
+    path.unlink()
+    print(f"Deleted {path}.")
     return 0
 
 
@@ -114,13 +96,13 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             init=args.init,
             only=args.only,
-            state_path=_history_file(),
+            state_path=history_file(),
         )
     except ConfigError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 1
     except ValueError as exc:
-        print(f"{exc}", file=sys.stderr)
+        print(f"Invalid argument: {exc}", file=sys.stderr)
         return 1
 
     log.info("Run finished with exit code %d", outcome.exit_code)
