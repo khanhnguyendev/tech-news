@@ -53,8 +53,8 @@ has already been sent and history already persisted.
   Each run overwrites `index.html` with today's digest and adds
   `archive/<YYYY-MM-DD>.html` for that day; `archive/index.html` links to
   every archived day. `site.keep_days` (default 30) controls how many of the
-  most recent archived days are kept — older archive pages are deleted on
-  the next run that writes the site.
+  most recent archived days are kept — every run that writes the site also
+  prunes archive pages older than `keep_days` before that day.
 
 ## Requirements
 
@@ -166,9 +166,9 @@ These live under `~/.technews/` by default (override with the
 - `~/.technews/video/` — the video recap's working files and `recap.mp4`,
   overwritten each run `video.enabled` is on
 
-The static site is not under `~/.technews/` by default — it has its own
-`site.output_dir` setting in `config.yaml` (see
-[Optional outputs](#optional-outputs)).
+The static site has its own `site.output_dir` setting in `config.yaml`,
+separate from `TECHNEWS_DATA_DIR` — it defaults to `~/.technews/site` but is
+not moved by that variable (see [Optional outputs](#optional-outputs)).
 
 ## Scheduling
 
