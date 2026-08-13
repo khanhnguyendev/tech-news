@@ -36,6 +36,18 @@ site:
   output_dir: ~/.technews/site
   keep_days: 30
 
+# Icon shown beside each category heading in the Telegram digest. A
+# category with no entry here falls back to a neutral pin, so adding a
+# source with a brand-new category never breaks rendering.
+categories:
+  Anthropic: "🤖"
+  YouTube: "📺"
+  Electron: "⚡"
+  Releases: "📦"
+  Apple: "🍎"
+  Trending: "📈"
+  Security: "🔒"
+
 sources:
   # Anthropic ---------------------------------------------------------------
   # Anthropic no longer publishes an RSS/Atom feed for /news (rss.xml, feed.xml,

@@ -44,13 +44,13 @@ def test_headline_with_markup_is_escaped_in_output():
 def test_groups_by_category_in_given_order():
     articles = [make("s1", category="Security"), make("a1", category="Anthropic")]
     [chunk] = render_digest(articles, ["Anthropic", "Security"], day=DAY)
-    assert chunk.html.index("Anthropic") < chunk.html.index("Security")
+    assert chunk.html.index("ANTHROPIC") < chunk.html.index("SECURITY")
 
 
 def test_includes_header_with_date_and_count():
     [chunk] = render_digest([make("one"), make("two")], ["Security"], day=DAY)
     assert "13 Aug 2026" in chunk.html
-    assert "2 stories" in chunk.html
+    assert "2 new items" in chunk.html
 
 
 def test_renders_link_and_source_per_item():
@@ -131,7 +131,7 @@ def test_no_articles_produces_no_chunks():
 def test_categories_absent_from_order_still_appear_last():
     articles = [make("x", category="Surprise")]
     [chunk] = render_digest(articles, ["Security"], day=DAY)
-    assert "Surprise" in chunk.html
+    assert "SURPRISE" in chunk.html
 
 
 def test_header_survives_when_the_first_category_forces_a_split():
@@ -154,7 +154,7 @@ def test_header_survives_when_the_first_category_forces_a_split():
     every run, regardless of Python's per-process hash randomization.
     """
     articles = [
-        make("H", link="https://x.test/%03d" % i) for i in range(100)
+        make("H", link="https://x.test/%03d" % i) for i in range(150)
     ]
     chunks = render_digest(articles, ["Security"], day=DAY)
     assert len(chunks) > 1
@@ -272,6 +272,78 @@ def test_failure_footer_gets_its_own_chunk_when_it_would_overflow_the_last_one()
     # specific article and must not affect delivery accounting.
     assert chunks[1].article_ids == []
     assert chunks[0].article_ids == [articles[0].id]
+
+
+ICONS = {"Anthropic": "🤖", "Security": "🔒"}
+
+
+def test_category_heading_carries_an_icon_and_a_count():
+    articles = [make("a"), make("b"), make("c")]
+    [chunk] = render_digest(articles, ["Security"], day=DAY, icons=ICONS)
+    assert "🔒" in chunk.html
+    assert "SECURITY" in chunk.html
+    assert "· 3" in chunk.html
+
+
+def test_unmapped_category_still_gets_a_heading():
+    [chunk] = render_digest([make("x", category="Surprise")], [], day=DAY, icons=ICONS)
+    assert "SURPRISE" in chunk.html
+
+
+def test_articles_are_grouped_under_their_source():
+    """Six security publications land in one category. Listing the source
+    after every headline made the category read as one undifferentiated
+    run; grouping puts each publication's items together under a single
+    label."""
+    articles = [
+        make("k1", source="Krebs"),
+        make("b1", source="Bleeping"),
+        make("k2", source="Krebs"),
+    ]
+    [chunk] = render_digest(articles, ["Security"], day=DAY, icons=ICONS)
+
+    assert chunk.html.count("Krebs") == 1, "one label per source, not per item"
+    assert chunk.html.count("Bleeping") == 1
+    # every item sits below its own source label
+    krebs = chunk.html.index("Krebs")
+    assert chunk.html.index("k1") > krebs and chunk.html.index("k2") > krebs
+
+
+def test_a_source_group_split_across_chunks_repeats_its_label():
+    """When a source's items span a chunk boundary the continuation must
+    reopen the label. Without it the second chunk starts with bare bullets
+    whose publication is anyone's guess."""
+    articles = [
+        make("Headline number %02d with enough text to force a split" % i,
+             source="Bleeping Computer",
+             link="https://x.test/%03d" % i)
+        for i in range(90)
+    ]
+    chunks = render_digest(articles, ["Security"], day=DAY, icons=ICONS)
+
+    assert len(chunks) > 1, "input must actually split, or this proves nothing"
+    for position, chunk in enumerate(chunks):
+        assert "Bleeping Computer" in chunk.html, (
+            f"chunk {position} carries items with no source label"
+        )
+
+
+def test_a_source_label_is_never_the_last_line_of_a_chunk():
+    """An orphaned label is worse than no label: it promises items that
+    landed in the next message."""
+    articles = [
+        make("Headline number %02d with enough text to force a split" % i,
+             source="Source %d" % (i // 7),
+             link="https://x.test/%03d" % i)
+        for i in range(90)
+    ]
+    for position, chunk in enumerate(render_digest(
+        articles, ["Security"], day=DAY, icons=ICONS
+    )):
+        last = chunk.html.rstrip().rsplit("\n", 1)[-1]
+        assert last.lstrip().startswith("•"), (
+            f"chunk {position} ends on a non-item line: {last!r}"
+        )
 
 
 def _headings_per_chunk(chunks):
