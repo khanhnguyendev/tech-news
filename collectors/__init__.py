@@ -56,8 +56,8 @@ def collect_all(sources: list[dict], session, only: str | None = None) -> Collec
             result.skipped_count += 1
             continue
 
-        strategy = STRATEGIES[source["type"]]
         try:
+            strategy = STRATEGIES[source["type"]]
             articles = strategy(source, session)
         except Exception as exc:  # noqa: BLE001 - isolation is the point
             log.error("Source %s failed: %s: %s", name, type(exc).__name__, exc)

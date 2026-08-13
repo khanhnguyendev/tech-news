@@ -63,6 +63,26 @@ def test_only_filter_runs_a_single_source(stub_strategies):
     assert [a.source for a in result.articles] == ["B"]
 
 
+def test_unknown_strategy_type_is_isolated_not_raised(stub_strategies, caplog):
+    """load_config() rejects an unknown `type` today, so this path is
+    unreachable through the normal CLI -- but the isolation boundary
+    (collect_all wraps each source in its own try/except so one broken
+    source can't take the whole run down) is supposed to cover every
+    source-level failure, including a STRATEGIES lookup miss, not just
+    the strategy call itself. A config built directly (bypassing
+    load_config's validation, as a test or a future caller might) must
+    still get isolated instead of raising a bare KeyError past the
+    boundary."""
+    with caplog.at_level("ERROR", logger="technews"):
+        result = collect_all(
+            [src("A"), src("Bogus", type_="carrier_pigeon"), src("B")], session=None
+        )
+    assert [a.source for a in result.articles] == ["A", "B"]
+    assert result.failed_count == 1
+    assert result.ok_count == 2
+    assert "Bogus" in caplog.text
+
+
 def test_only_filter_with_unknown_name_raises(stub_strategies):
     with pytest.raises(ValueError, match="No source named"):
         collect_all([src("A")], session=None, only="Nope")
