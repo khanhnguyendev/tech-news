@@ -73,3 +73,41 @@ def test_setup_logging_verbose_flag_controls_level(tmp_path, monkeypatch):
         for handler in log.handlers:
             handler.close()
         log.handlers.clear()
+
+
+def test_truncate_leaves_short_text_untouched():
+    """No ellipsis when nothing was cut -- a trailing … on a complete
+    sentence tells the reader something is missing when nothing is."""
+    from models import truncate
+
+    assert truncate("Short enough", 200) == "Short enough"
+    assert truncate("x" * 200, 200) == "x" * 200
+
+
+def test_truncate_cuts_at_a_word_boundary():
+    from models import truncate
+
+    text = "The fastest browser for AI agents. Zero cost, zero configuration"
+    assert truncate(text, 45) == "The fastest browser for AI agents. Zero…"
+
+
+def test_truncate_never_exceeds_the_limit():
+    from models import truncate
+
+    for limit in (10, 45, 200):
+        assert len(truncate("word " * 100, limit)) <= limit
+
+
+def test_truncate_hard_cuts_a_single_oversized_word():
+    """A URL-like token with no spaces still has to fit."""
+    from models import truncate
+
+    result = truncate("x" * 500, 200)
+    assert len(result) == 200
+    assert result.endswith("…")
+
+
+def test_truncate_drops_trailing_punctuation_before_the_ellipsis():
+    from models import truncate
+
+    assert truncate("Alpha beta, gamma delta", 14) == "Alpha beta…"

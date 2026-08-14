@@ -16,7 +16,7 @@ import re
 from bs4 import BeautifulSoup
 
 from collectors.http import fetch
-from models import Article, log
+from models import Article, log, truncate
 
 TRENDING_URL = "https://github.com/trending"
 DESCRIPTION_LIMIT = 200
@@ -88,7 +88,7 @@ def collect(source: dict, session) -> list[Article]:
         gain = _STARS_TODAY_RE.search(_text(row.select_one("span.float-sm-right")))
         today = int(gain.group(1).replace(",", "")) if gain else None
         language = _text(row.select_one("[itemprop=programmingLanguage]"))
-        description = _text(row.select_one("p"))[:DESCRIPTION_LIMIT]
+        description = truncate(_text(row.select_one("p")), DESCRIPTION_LIMIT)
 
         # Only the parts that exist, so a repo with no language does not
         # leave a dangling separator behind.

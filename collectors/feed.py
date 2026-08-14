@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 import feedparser
 
 from collectors.http import fetch
-from models import Article, log
+from models import Article, log, truncate
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([.,!?;:)\]])")
@@ -27,7 +27,7 @@ def strip_html(value: str, limit: int = 200) -> str:
     text = html_module.unescape(text)
     text = _WHITESPACE_RE.sub(" ", text)
     text = _SPACE_BEFORE_PUNCT_RE.sub(r"\1", text).strip()
-    return text[:limit]
+    return truncate(text, limit)
 
 
 def _to_utc(struct_time) -> datetime | None:
