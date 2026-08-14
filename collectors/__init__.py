@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from collectors import feed, github_release, html_scrape
+from collectors import feed, github_release, github_trending, html_scrape
 from models import Article, log
 
 STRATEGIES = {
     "feed": feed.collect,
     "github_release": github_release.collect,
+    "github_trending": github_trending.collect,
     "html": html_scrape.collect,
 }
 

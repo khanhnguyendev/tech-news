@@ -158,14 +158,17 @@ sources:
   # channel-level one) -- "trending" is a daily snapshot, not a publication
   # event, so there is no timestamp to gate on in the first place. new_only
   # relies on dedup alone, same rationale as the Anthropic sources above.
+  # Scraped from github.com/trending directly rather than the community
+  # RSS mirror: only the trending page carries stars-gained-today, which is
+  # the number that actually says whether a repo is notable. One request
+  # instead of a mirror plus per-repo API calls, and one dependency fewer.
   - name: "GitHub Trending"
     category: "Trending"
-    type: feed
+    type: github_trending
     gate: new_only
-    url: "https://mshibanami.github.io/GitHubTrendingRSS/daily/all.xml"
-    keywords: []
-
-  # Security ----------------------------------------------------------------
+    # The one source whose blurb is worth the lines it costs: a bare
+    # owner/repo tells the reader nothing.
+    include_blurb: true
   - name: "The Hacker News"
     category: "Security"
     type: feed

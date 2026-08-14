@@ -439,3 +439,31 @@ def test_limit_holds_across_the_size_table_with_a_failure_footer_present():
         delivered = [aid for c in chunks for aid in c.article_ids]
         assert sorted(delivered) == sorted(a.id for a in articles), sizes
         assert len(delivered) == len(set(delivered)), sizes
+
+
+def test_blurb_can_be_enabled_for_one_source_only():
+    """The global default keeps digests dense, but a trending listing is
+    useless without its metrics. The per-source override is what lets one
+    source opt in without turning every headline into three lines."""
+    trending = make("owner/repo", source="GitHub Trending", blurb="⭐ 15.7k\nA tool")
+    krebs = make("Some breach", source="Krebs", blurb="Long background prose")
+
+    [chunk] = render_digest(
+        [trending, krebs],
+        ["Security"],
+        day=DAY,
+        include_blurb=False,
+        blurb_by_source={"GitHub Trending": True, "Krebs": False},
+    )
+
+    assert "15.7k" in chunk.html
+    assert "A tool" in chunk.html
+    assert "Long background prose" not in chunk.html
+
+
+def test_a_multiline_blurb_indents_every_line():
+    article = make("owner/repo", source="GitHub Trending", blurb="metrics line\ndescription line")
+    [chunk] = render_digest(
+        [article], ["Security"], day=DAY, blurb_by_source={"GitHub Trending": True}
+    )
+    assert "\n  metrics line\n  description line" in chunk.html
