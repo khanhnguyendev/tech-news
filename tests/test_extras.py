@@ -159,3 +159,49 @@ def test_site_failure_is_logged_and_swallowed(tmp_path, monkeypatch, caplog):
     with caplog.at_level("ERROR", logger="technews"):
         extras([article("a")])
     assert "disk full" in caplog.text
+
+
+def test_site_failure_does_not_prevent_publishing_being_attempted(tmp_path, monkeypatch):
+    """Three optional outputs now, each in its own try/except. A site write
+    that fails must not silently cost the publish step, exactly as an
+    ffmpeg crash must not cost the site."""
+    cfg = config_with_site(tmp_path)
+    cfg["site"]["publish"] = {"enabled": True, "repo": "o/r"}
+    attempted = []
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(dispatchers.site, "write_site", boom)
+    monkeypatch.setattr(
+        dispatchers.pages, "publish", lambda *a, **k: attempted.append(1)
+    )
+
+    extras = make_extras(None, cfg, day=DAY, token="T", chat_id="C", data_dir=tmp_path)
+    extras([article("a")])
+
+    assert attempted == [1]
+
+
+def test_publish_failure_is_logged_and_swallowed(tmp_path, monkeypatch, caplog):
+    cfg = config_with_site(tmp_path)
+    cfg["site"]["publish"] = {"enabled": True, "repo": "o/r"}
+
+    def boom(*a, **k):
+        raise RuntimeError("remote rejected")
+
+    monkeypatch.setattr(dispatchers.pages, "publish", boom)
+    extras = make_extras(None, cfg, day=DAY, token="T", chat_id="C", data_dir=tmp_path)
+    with caplog.at_level("ERROR", logger="technews"):
+        extras([article("a")])
+    assert "remote rejected" in caplog.text
+
+
+def test_publishing_disabled_calls_nothing(tmp_path, monkeypatch):
+    called = []
+    monkeypatch.setattr(dispatchers.pages, "publish", lambda *a, **k: called.append(1))
+    extras = make_extras(
+        None, config_with_site(tmp_path), day=DAY, token="T", chat_id="C", data_dir=tmp_path
+    )
+    extras([article("a")])
+    assert called == []

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from models import Article, HTTP_TIMEOUT, log, log_file
+from models import Article, HTTP_TIMEOUT, group_by_source, log, log_file
 
 MAX_MESSAGE_CHARS = 4096
 API_TEMPLATE = "https://api.telegram.org/bot{token}/{method}"
@@ -70,21 +70,6 @@ def _source_label(source: str) -> str:
 def _category_label(category: str, count: int, icons: dict[str, str]) -> str:
     icon = icons.get(category, DEFAULT_ICON)
     return f"{icon} <b>{escape(category.upper())}</b> · {count}"
-
-
-def _group_by_source(in_category: list[Article]) -> list[Article]:
-    """Partition a category's articles by source, stably.
-
-    The input is in the global newest-first order. Grouping keeps that
-    order in two ways: sources appear in the order their newest article
-    did, and each source's own articles stay newest-first. Nothing is
-    re-sorted, so the digest never contradicts the order the rest of the
-    system uses.
-    """
-    groups: dict[str, list[Article]] = {}
-    for article in in_category:
-        groups.setdefault(article.source, []).append(article)
-    return [article for group in groups.values() for article in group]
 
 
 def _ordered_categories(articles: list[Article], category_order: list[str]) -> list[str]:
@@ -167,7 +152,7 @@ def render_digest(
         current_len += addition
 
     for category in _ordered_categories(articles, category_order):
-        in_category = _group_by_source(
+        in_category = group_by_source(
             [a for a in articles if a.category == category]
         )
         heading = _category_label(category, len(in_category), icons)
