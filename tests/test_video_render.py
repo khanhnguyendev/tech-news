@@ -216,3 +216,107 @@ def test_smoke_real_ffmpeg_produces_a_playable_file(tmp_path):
     result = generate([make("a"), make("b")], cfg(), tmp_path, day=DAY)
     assert result is not None
     assert result.stat().st_size > 1000
+
+
+def test_slide_carries_an_index_and_a_progress_bar():
+    """The old slide gave no sense of position: every frame looked like it
+    could be the last. The index and the bar answer 'how much is left'."""
+    from dispatchers.video import render_segment
+    segments = timeline(count=3)
+    image = render_segment(segments[2], resolution=RESOLUTION,
+                           font_path="/nonexistent/font.ttf", total=len(segments))
+    assert image.size == RESOLUTION
+
+
+def test_render_segment_still_works_without_a_total():
+    from dispatchers.video import render_segment
+    image = render_segment(timeline()[1], resolution=RESOLUTION,
+                           font_path="/nonexistent/font.ttf")
+    assert image.size == RESOLUTION
+
+
+def test_crossfade_args_chain_one_xfade_per_boundary(tmp_path):
+    from dispatchers.video import ffmpeg_args
+    slides = [tmp_path / f"s{i}.png" for i in range(3)]
+    for s in slides:
+        s.write_bytes(b"")
+    args = ffmpeg_args(
+        concat_path=None, music_path=None, out_path=tmp_path / "o.mp4",
+        duration=11.0, resolution=RESOLUTION,
+        slides=slides, durations=[3.0, 4.0, 4.0], crossfade=0.5,
+    )
+    joined = " ".join(str(a) for a in args)
+    assert joined.count("xfade") == 2, "one transition per boundary"
+    assert args.count("-loop") == 3, "each slide is looped as its own input"
+    assert "concat" not in joined
+
+
+def test_crossfade_offsets_account_for_earlier_fades(tmp_path):
+    from dispatchers.video import ffmpeg_args
+    slides = [tmp_path / f"s{i}.png" for i in range(3)]
+    for s in slides:
+        s.write_bytes(b"")
+    args = ffmpeg_args(
+        concat_path=None, music_path=None, out_path=tmp_path / "o.mp4",
+        duration=11.0, resolution=RESOLUTION,
+        slides=slides, durations=[3.0, 4.0, 4.0], crossfade=0.5,
+    )
+    graph = [a for a in args if "xfade" in str(a)][0]
+    assert "offset=2.500" in graph
+    assert "offset=6.000" in graph
+
+
+def test_zero_crossfade_still_uses_the_concat_demuxer(tmp_path):
+    from dispatchers.video import ffmpeg_args
+    args = ffmpeg_args(
+        concat_path=tmp_path / "c.txt", music_path=None,
+        out_path=tmp_path / "o.mp4", duration=11.0, resolution=RESOLUTION,
+    )
+    assert "concat" in " ".join(str(a) for a in args)
+    assert "xfade" not in " ".join(str(a) for a in args)
+
+
+def test_a_short_headline_gets_larger_type_than_a_long_one():
+    """A 1920px frame holding two lines of fixed-size text is mostly empty.
+    Fitting the size to the available region is what makes a short
+    headline strike and a long one still fit."""
+    from dispatchers.video import fit_title_font
+
+    from PIL import Image, ImageDraw
+    draw = ImageDraw.Draw(Image.new("RGB", RESOLUTION))
+    short, _ = fit_title_font("Short one", draw, "/nonexistent/font.ttf",
+                              usable=940, region=900, width=1080)
+    long_font, _ = fit_title_font(
+        "Google Cloud Sets Out Post-Quantum Roadmap With 2029 Readiness Goal "
+        "And Several Other Long Clauses To Force Wrapping",
+        draw, "/nonexistent/font.ttf", usable=940, region=900, width=1080,
+    )
+    assert short.size > long_font.size
+
+
+def test_fitted_type_never_overflows_the_region():
+    from dispatchers.video import fit_title_font
+
+    from PIL import Image, ImageDraw
+    draw = ImageDraw.Draw(Image.new("RGB", RESOLUTION))
+    for headline in ["Tiny", "A moderately sized headline here", "word " * 60]:
+        font, lines = fit_title_font(headline, draw, "/nonexistent/font.ttf",
+                                     usable=940, region=900, width=1080)
+        assert len(lines) * int(font.size * 1.19) <= 900
+
+
+def test_fitted_type_never_overflows_the_frame_horizontally():
+    """wrap_text lets the first word of a line through regardless of width,
+    to guarantee progress. At large sizes a long word like "Post-Quantum"
+    then runs off the right edge, which is only visible once rendered."""
+    from dispatchers.video import fit_title_font
+    from PIL import Image, ImageDraw
+
+    draw = ImageDraw.Draw(Image.new("RGB", RESOLUTION))
+    usable = 940
+    font, lines = fit_title_font(
+        "Google Cloud Sets Out Post-Quantum Roadmap With 2029 Readiness Goal",
+        draw, "/nonexistent/font.ttf", usable=usable, region=1200, width=1080,
+    )
+    for line in lines:
+        assert draw.textlength(line, font=font) <= usable, line
