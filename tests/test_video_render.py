@@ -320,3 +320,38 @@ def test_fitted_type_never_overflows_the_frame_horizontally():
     )
     for line in lines:
         assert draw.textlength(line, font=font) <= usable, line
+
+
+def test_background_is_no_longer_a_flat_field():
+    """A single solid colour across a 1920px frame reads as a void. Grain
+    plus a faint category-tinted glow gives the frame material without
+    competing with the headline."""
+    from dispatchers.video import render_background
+    image = render_background(RESOLUTION, (255, 159, 64))
+    colours = {image.getpixel((x, y)) for x in range(0, 500, 37)
+               for y in range(0, 900, 41)}
+    assert len(colours) > 50, "a flat fill would yield one colour"
+
+
+def test_the_glow_stays_faint_enough_for_the_ghost_index_to_read():
+    """The index is drawn a little lighter than the base background and
+    reads as sitting behind the text. If the glow lifted the background
+    past it the relationship would invert and the anchor would come
+    forward instead."""
+    from dispatchers.video import render_background, GHOST
+    image = render_background(RESOLUTION, (255, 159, 64)).convert("L")
+    ghost_luma = sum(GHOST) / 3
+    brightest = max(
+        image.getpixel((x, y)) for x in range(0, RESOLUTION[0], 23)
+        for y in range(0, int(RESOLUTION[1] * 0.4), 23)
+    )
+    assert brightest < ghost_luma, (brightest, ghost_luma)
+
+
+def test_the_background_is_deterministic():
+    """Two runs of the same day must produce identical slides, or the video
+    would differ byte for byte on every render for no reason."""
+    from dispatchers.video import render_background
+    a = render_background(RESOLUTION, (94, 214, 143))
+    b = render_background(RESOLUTION, (94, 214, 143))
+    assert a.tobytes() == b.tobytes()
