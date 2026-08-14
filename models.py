@@ -71,6 +71,25 @@ def normalize_url(url: str) -> str:
     )
 
 
+ELLIPSIS = "\u2026"
+
+
+def truncate(text: str, limit: int) -> str:
+    """Shorten text to `limit` characters, cutting at a word boundary.
+
+    A blind `text[:limit]` slices mid-word, which in a digest reads as a
+    typo rather than as an abbreviation -- "Zero cost, zero conf" looks
+    broken, not shortened. The ellipsis counts toward the limit, so the
+    result never exceeds it, and it is only added when something really
+    was cut.
+    """
+    if len(text) <= limit:
+        return text
+    window = text[: limit - len(ELLIPSIS)]
+    cut = window.rsplit(" ", 1)[0] if " " in window else window
+    return cut.rstrip(" ,.;:-") + ELLIPSIS
+
+
 @dataclass(frozen=True, slots=True)
 class Article:
     category: str

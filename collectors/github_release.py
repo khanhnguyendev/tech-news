@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 
 from collectors.http import fetch_json
-from models import Article, log
+from models import Article, log, truncate
 
 API_TEMPLATE = "https://api.github.com/repos/{repo}/releases"
 BLURB_LIMIT = 200
@@ -55,7 +55,7 @@ def collect(source: dict, session) -> list[Article]:
                 headline=headline,
                 link=link,
                 published=_parse_timestamp(release.get("published_at")),
-                blurb=(release.get("body") or "").strip()[:BLURB_LIMIT],
+                blurb=truncate((release.get("body") or "").strip(), BLURB_LIMIT),
             )
         )
     return articles

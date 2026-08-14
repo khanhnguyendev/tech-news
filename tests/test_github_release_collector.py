@@ -73,10 +73,20 @@ def test_parses_published_at_as_utc():
 
 
 def test_blurb_is_truncated_release_body():
+    """The exact length is no longer 200: truncation now stops at a word
+    boundary, so the result lands just under the limit and carries an
+    ellipsis. Asserting the boundary rather than a magic number is what
+    the test was always trying to check."""
     articles = collect(source(), RecordingSession(payload()))
     scheduled = [a for a in articles if a.headline == "Scheduled release"]
     assert len(scheduled) == 1
-    assert len(scheduled[0].blurb) == 200
+    blurb = scheduled[0].blurb
+    body = [r for r in payload() if r["name"] == "Scheduled release"][0]["body"]
+
+    assert len(blurb) <= 200
+    assert len(blurb) < len(body), "a long body must actually be shortened"
+    assert blurb.endswith("…")
+    assert not blurb[:-1].endswith(" "), "no dangling space before the ellipsis"
 
 
 def test_null_published_at_yields_none_without_crashing():
