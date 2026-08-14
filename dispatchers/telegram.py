@@ -50,10 +50,16 @@ DEFAULT_ICON = "📌"
 def _render_item(article: Article, include_blurb: bool) -> str:
     """One article. The source is NOT repeated here -- it is carried by the
     group label above, so a category with six publications reads as six
-    labelled blocks instead of one run of near-identical lines."""
+    labelled blocks instead of one run of near-identical lines.
+
+    A blurb may span several lines (trending repos put their metrics on one
+    and the description on the next); every line is indented so the block
+    reads as belonging to the bullet above it.
+    """
     line = f'• <a href="{_escape_attr(article.link)}">{escape(article.headline)}</a>'
     if include_blurb and article.blurb:
-        line += f"\n  {escape(article.blurb)}"
+        for part in article.blurb.split("\n"):
+            line += f"\n  {escape(part)}"
     return line
 
 
@@ -99,6 +105,7 @@ def render_digest(
     *,
     day: date,
     include_blurb: bool = False,
+    blurb_by_source: dict[str, bool] | None = None,
     limit: int = MAX_MESSAGE_CHARS,
     failed_count: int = 0,
     icons: dict[str, str] | None = None,
@@ -116,6 +123,7 @@ def render_digest(
     scraper still shows up somewhere the reader actually looks.
     """
     icons = icons or {}
+    blurb_by_source = blurb_by_source or {}
     if not articles:
         return []
 
@@ -163,7 +171,10 @@ def render_digest(
             [a for a in articles if a.category == category]
         )
         heading = _category_label(category, len(in_category), icons)
-        items = [_render_item(a, include_blurb) for a in in_category]
+        items = [
+            _render_item(a, blurb_by_source.get(a.source, include_blurb))
+            for a in in_category
+        ]
 
         # Always split at item boundaries. The budget for each sub-block is
         # recomputed from the live buffer state (current_len) right before

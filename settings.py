@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-VALID_TYPES = {"feed", "github_release", "html"}
+VALID_TYPES = {"feed", "github_release", "github_trending", "html"}
 VALID_GATES = {"published", "new_only"}
 
 
@@ -98,6 +98,16 @@ def category_order(config: dict) -> list[str]:
         if category not in order:
             order.append(category)
     return order
+
+
+def blurb_by_source(config: dict) -> dict[str, bool]:
+    """Source name -> whether its blurb is shown, where the source overrides
+    the global telegram.include_blurb. Most sources are better without one;
+    a trending listing is useless without it."""
+    default = bool(config.get("telegram", {}).get("include_blurb", False))
+    return {
+        s["name"]: bool(s.get("include_blurb", default)) for s in config["sources"]
+    }
 
 
 def category_icons(config: dict) -> dict[str, str]:

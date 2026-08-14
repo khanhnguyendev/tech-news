@@ -309,7 +309,7 @@ zero entries counts as a failure.**
 
 Covers: Anthropic news / engineering / changelog, Anthropic course-repo GitHub
 Atom commits, all YouTube channels, Electron blog, Apple Developer News,
-Swift.org, all security publications, and the GitHub Trending RSS mirror.
+Swift.org, and all security publications.
 
 ### `github_release.py` (type: `github_release`)
 
@@ -332,7 +332,7 @@ alone would fill the digest.
 preferentially from a `<time datetime="...">` attribute (ISO 8601, parsed with
 `datetime.fromisoformat`). No machine-readable date → `published = None`.
 
-Covers: Anthropic events, and GitHub Trending if the community RSS mirror dies.
+Covers: Anthropic events.
 
 ---
 
@@ -638,7 +638,7 @@ for three days still produces a complete catch-up digest.
 |---|---|
 | An upstream feed changes schema or goes offline | Per-source try/except; the log names the failing source; `--only NAME` reproduces it |
 | Every source fails (network outage) | Exit code 3 distinguishes this from a quiet news day |
-| The GitHub Trending RSS mirror is discontinued | Switch that source to `type: html` with selectors — config change, no code |
+| ~~The GitHub Trending RSS mirror is discontinued~~ | Resolved 2026-08-14: replaced by `type: github_trending`, which scrapes github.com/trending directly. The mirror carried no star counts, so it could not answer whether a repo was notable. |
 | Telegram token revoked or chat id changed | Delivery fails, exit 2, undelivered articles retry on the next successful run |
 | Partial multi-message delivery | Seen-marking is per successfully sent message; no duplicates, no losses |
 | `history.json` corruption | Atomic writes; a corrupt file is preserved as `.bad` and an empty state is used |
@@ -673,7 +673,7 @@ the eleven are `type: feed`, which is the evidence behind the §2 deviation.
 | Releases | Playwright | github_release | `microsoft/playwright` |
 | Apple | Apple Developer News | feed | |
 | Apple | Swift.org | feed | |
-| Trending | GitHub Trending | feed | community RSS mirror; `keywords` and language filtering apply |
+| Trending | GitHub Trending | github_trending | scrapes github.com/trending; carries description, language, total stars and stars-gained-today |
 | Security | The Hacker News | feed | |
 | Security | Bleeping Computer | feed | |
 | Security | Krebs on Security | feed | |
@@ -688,8 +688,8 @@ as fixture capture: the saved response for each distinct source shape becomes a
 test fixture. URLs are not asserted in this spec because an unverified URL that
 looks plausible is worse than no URL at all.
 
-The GitHub Trending mirror is the least durable source here; §11 records the
-fallback to `type: html`.
+GitHub Trending is now scraped directly (see §11); like any scraper it
+breaks when the page markup changes, and does so loudly.
 
 ## 13. Future work
 

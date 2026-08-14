@@ -14,6 +14,14 @@ def test_every_source_has_a_usable_target():
     for source in load_config(CONFIG_PATH)["sources"]:
         if source["type"] == "github_release":
             assert source.get("repo"), source["name"]
+        elif source["type"] == "github_trending":
+            # The only type with a built-in default target. A url is
+            # optional here and exists to scope the listing by language or
+            # period, so it is checked only when present.
+            url = source.get("url")
+            assert url is None or url.startswith("https://github.com/trending"), (
+                source["name"]
+            )
         else:
             assert source.get("url", "").startswith("http"), source["name"]
 
