@@ -25,6 +25,9 @@ history:
 video:
   enabled: true
   seconds_per_slide: 4
+  # Cross-fade between slides. Shortens the video by (slides-1)*this, which
+  # build_timeline accounts for so recap.srt stays aligned with the render.
+  crossfade_seconds: 0.5
   max_slides: 20
   resolution: [1080, 1920]
   font: /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf

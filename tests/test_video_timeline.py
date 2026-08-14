@@ -90,3 +90,36 @@ def test_timeline_json_round_trips_every_field():
     assert payload[1]["source"] == "Krebs"
     assert payload[1]["category"] == "Security"
     assert payload[1]["start"] == 3.0
+
+
+def test_crossfade_pulls_each_segment_earlier():
+    """xfade overlaps neighbours, so the finished video is shorter than the
+    sum of its slides. If the timeline ignored that, recap.srt would drift
+    further out of sync with every slide, which defeats the artifact's
+    whole purpose."""
+    segments = build_timeline(
+        [make(f"h{i}") for i in range(3)],
+        seconds_per_slide=4.0,
+        cover_title="cover",
+        cover_seconds=3.0,
+        crossfade_seconds=0.5,
+    )
+    starts = [s.start for s in segments]
+    assert starts[0] == 0.0
+    assert starts[1] == 3.0 - 0.5
+    assert starts[2] == 3.0 + 4.0 - 1.0
+
+
+def test_crossfade_shortens_the_total_duration():
+    plain = build_timeline([make("a"), make("b")], seconds_per_slide=4.0,
+                           cover_title="c", cover_seconds=3.0)
+    faded = build_timeline([make("a"), make("b")], seconds_per_slide=4.0,
+                           cover_title="c", cover_seconds=3.0, crossfade_seconds=0.5)
+    assert total_duration(faded) == total_duration(plain) - 2 * 0.5
+
+
+def test_zero_crossfade_matches_the_old_contiguous_timeline():
+    faded = build_timeline([make("a"), make("b")], seconds_per_slide=4.0,
+                           cover_title="c", crossfade_seconds=0.0)
+    for earlier, later in zip(faded, faded[1:]):
+        assert earlier.end == later.start
