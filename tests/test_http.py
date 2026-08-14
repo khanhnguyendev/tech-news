@@ -84,3 +84,78 @@ def test_fetch_failure_preserves_the_underlying_cause():
         fetch(session, "https://x.test/rss")
     assert excinfo.value.__cause__ is not None
     assert isinstance(excinfo.value.__cause__, requests.RequestException)
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+        self.slept = []
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def throttle(interval=1.5):
+    from collectors.http import HostThrottle
+
+    clock = FakeClock()
+    return HostThrottle(interval, clock=clock.time, sleeper=clock.sleep), clock
+
+
+def test_first_request_to_a_host_does_not_wait():
+    t, clock = throttle()
+    t.wait("https://www.youtube.com/feeds/videos.xml?channel_id=A")
+    assert clock.slept == []
+
+
+def test_a_second_request_to_the_same_host_waits_the_remainder():
+    """Five YouTube feeds fired back to back got throttled by YouTube into
+    404s and a 500 -- interleaved with a success, which is what rules out
+    bad channel ids. Spacing them is the fix aimed at the cause."""
+    t, clock = throttle(1.5)
+    t.wait("https://www.youtube.com/feeds/videos.xml?channel_id=A")
+    clock.now += 0.4
+    t.wait("https://www.youtube.com/feeds/videos.xml?channel_id=B")
+    assert clock.slept == [pytest.approx(1.1)]
+
+
+def test_a_different_host_is_not_delayed():
+    t, clock = throttle()
+    t.wait("https://www.youtube.com/feeds/videos.xml")
+    t.wait("https://krebsonsecurity.com/feed/")
+    assert clock.slept == []
+
+
+def test_no_wait_once_the_interval_has_already_passed():
+    t, clock = throttle(1.5)
+    t.wait("https://www.youtube.com/a")
+    clock.now += 5.0
+    t.wait("https://www.youtube.com/b")
+    assert clock.slept == []
+
+
+def test_three_rapid_requests_are_spaced_cumulatively():
+    """Each wait records the time it finished, so requests do not all
+    bunch up against the first one's timestamp."""
+    t, clock = throttle(1.5)
+    for path in "abc":
+        t.wait(f"https://www.youtube.com/{path}")
+    assert clock.slept == [pytest.approx(1.5), pytest.approx(1.5)]
+    assert clock.now == pytest.approx(3.0)
+
+
+def test_make_session_attaches_a_throttle():
+    from collectors.http import HostThrottle
+
+    assert isinstance(getattr(make_session(), "throttle", None), HostThrottle)
+
+
+def test_a_session_without_a_throttle_is_not_delayed():
+    """Test fakes have no throttle attribute, so the suite never sleeps for
+    spacing -- only the real session built by make_session() does."""
+    session = FakeSession([FakeResponse(content=b"ok")])
+    assert fetch(session, "https://x.test/a") == b"ok"
