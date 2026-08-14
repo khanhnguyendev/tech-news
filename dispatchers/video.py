@@ -8,13 +8,14 @@ re-collecting anything.
 from __future__ import annotations
 
 import json
+import random
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from models import Article, log
 
@@ -170,6 +171,49 @@ def wrap_text(text: str, font, max_width: int, draw) -> list[str]:
     return lines
 
 
+GRAIN_SEED = 1917
+GRAIN_AMPLITUDE = 10
+GLOW_STRENGTH = 0.10
+
+
+def render_background(resolution, accent) -> Image.Image:
+    """The frame's material: film grain plus a faint accent-tinted glow.
+
+    A single solid colour across 1920 pixels reads as a void rather than
+    as restraint. The glow is kept well below the ghost index's own
+    lightness so the index still reads as sitting behind the text; lifting
+    the background past it would invert that relationship and pull the
+    anchor forward.
+
+    Deterministic by construction: the same day rendered twice produces
+    identical slides.
+    """
+    width, height = resolution
+    image = Image.new("RGB", (width, height), BACKGROUND)
+
+    mask = Image.new("L", (max(1, width // 6), max(1, height // 6)), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse(
+        [-width // 12, height // 9, width // 5, height // 3],
+        fill=int(255 * GLOW_STRENGTH),
+    )
+    mask = mask.resize((width, height)).filter(
+        ImageFilter.GaussianBlur(max(8, width // 6))
+    )
+    image = Image.composite(
+        Image.blend(image, Image.new("RGB", (width, height), accent), 0.5),
+        image,
+        mask,
+    )
+
+    # Seeded rather than Image.effect_noise, which is not reproducible:
+    # identical input would otherwise render a different file every time.
+    rng = random.Random(GRAIN_SEED)
+    grain = Image.frombytes("L", (width, height), rng.randbytes(width * height))
+    grain = grain.point(lambda value: value * GRAIN_AMPLITUDE // 255)
+    return ImageChops.add(image, Image.merge("RGB", (grain, grain, grain)))
+
+
 def fit_title_font(headline, draw, font_path, *, usable, region, width):
     """Pick the largest title size whose wrapped lines still fit `region`.
 
@@ -208,9 +252,9 @@ def render_segment(
     """
     width, height = resolution
     margin = int(width * MARGIN_RATIO)
-    image = Image.new("RGB", (width, height), BACKGROUND)
-    draw = ImageDraw.Draw(image)
     accent = CATEGORY_COLOURS.get(segment.category, ACCENT)
+    image = render_background(resolution, accent)
+    draw = ImageDraw.Draw(image)
     is_cover = segment.index == 0
     usable = width - 2 * margin
 
