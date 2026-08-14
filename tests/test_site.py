@@ -183,3 +183,62 @@ def test_prune_ignores_unparseable_filenames(tmp_path):
     (archive / "notes.html").write_text("x")
     assert prune_archive(archive, keep_days=1, today=DAY) == 0
     assert (archive / "notes.html").exists()
+
+
+ICONS = {"Security": "🔒", "Trending": "📈"}
+
+
+def test_page_contains_no_em_dash_anywhere():
+    """The em-dash is the single most recognisable machine-written tell,
+    and it was in the h1, the title, and every undated item's timestamp."""
+    html = render_page(
+        [make("one"), make("two", category="Trending")], ["Security"], day=DAY, icons=ICONS
+    )
+    assert "—" not in html
+    assert "–" not in html
+
+
+def test_undated_items_have_no_placeholder_timestamp():
+    """An undated article used to print a lone dash where a time would go,
+    which reads as a rendering fault rather than as absent information."""
+    undated = Article("Trending", "GitHub Trending", "owner/repo",
+                      "https://x.test/r", None, blurb="")
+    html = render_page([undated], ["Trending"], day=DAY, icons=ICONS)
+    assert "owner/repo" in html
+    assert ">-<" not in html
+
+
+def test_category_heading_carries_its_icon_and_count():
+    """The digest and the site render the same data; they should not speak
+    two different visual languages."""
+    html = render_page([make("a"), make("b")], ["Security"], day=DAY, icons=ICONS)
+    assert "🔒" in html
+    assert ">2<" in html or "2</span>" in html
+
+
+def test_items_are_grouped_under_their_source():
+    html = render_page(
+        [make("k1", source="Krebs"), make("b1", source="Bleeping"), make("k2", source="Krebs")],
+        ["Security"],
+        day=DAY,
+        icons=ICONS,
+    )
+    assert html.count(">Krebs<") == 1
+    assert html.count(">Bleeping<") == 1
+
+
+def test_items_are_not_cards():
+    """26 identical elevated cards communicate no hierarchy. Hairline rules
+    group without pretending each headline is its own object."""
+    html = render_page([make("a"), make("b")], ["Security"], day=DAY, icons=ICONS)
+    assert "border-radius" not in html.lower() or "--card" not in html
+    assert "box-shadow" not in html.lower()
+
+
+def test_reduced_motion_is_honoured():
+    html = render_page([make("a")], ["Security"], day=DAY, icons=ICONS)
+    assert "prefers-reduced-motion" in html
+
+
+def test_archive_index_has_no_em_dash():
+    assert "—" not in render_archive_index([DAY])

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from dispatchers import site, telegram, video
+from dispatchers import pages, site, telegram, video
 from models import Article, log
 
 
@@ -25,7 +25,7 @@ def make_extras(
     the static site, and vice versa. None of them can change the run's exit
     code -- the digest has already arrived by the time this is called.
     """
-    from settings import category_order
+    from settings import category_icons, category_order
 
     video_cfg = config.get("video", {})
     site_cfg = config.get("site", {})
@@ -45,8 +45,26 @@ def make_extras(
 
         if site_cfg.get("enabled", False):
             try:
-                site.write_site(articles, order, site_cfg, day=day)
+                site.write_site(
+                    articles, order, site_cfg, day=day,
+                    icons=category_icons(config),
+                )
             except Exception as exc:  # noqa: BLE001 - never critical
                 log.error("Site output failed: %s: %s", type(exc).__name__, exc)
+
+            # Its own try/except, like every other optional output: a push
+            # rejected by GitHub must not cost the locally written site.
+            publish_cfg = site_cfg.get("publish") or {}
+            if publish_cfg.get("enabled", False):
+                try:
+                    pages.publish(
+                        Path(site_cfg.get("output_dir", "~/.technews/site")).expanduser(),
+                        data_dir / "pages-repo",
+                        publish_cfg,
+                    )
+                except Exception as exc:  # noqa: BLE001 - never critical
+                    log.error(
+                        "Site publish failed: %s: %s", type(exc).__name__, exc
+                    )
 
     return extras

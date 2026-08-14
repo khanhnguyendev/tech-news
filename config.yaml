@@ -35,6 +35,12 @@ site:
   enabled: true
   output_dir: ~/.technews/site
   keep_days: 30
+  # Mirrored to an orphan gh-pages branch and force-pushed as one commit,
+  # so a year of daily HTML never accumulates in the repository history.
+  # The repo is public, so the published archive is public too.
+  publish:
+    enabled: true
+    repo: khanhnguyendev/tech-news
 
 # Icon shown beside each category heading in the Telegram digest. A
 # category with no entry here falls back to a neutral pin, so adding a

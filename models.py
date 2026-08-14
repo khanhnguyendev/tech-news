@@ -74,6 +74,21 @@ def normalize_url(url: str) -> str:
 ELLIPSIS = "\u2026"
 
 
+def group_by_source(articles: list["Article"]) -> list["Article"]:
+    """Partition articles by source, stably.
+
+    The input is in the global newest-first order. Grouping preserves it in
+    two ways: sources appear in the order their newest article did, and
+    each source's own articles stay newest-first. Shared by the digest and
+    the site so the two outputs never present the same data in a different
+    order.
+    """
+    groups: dict[str, list["Article"]] = {}
+    for article in articles:
+        groups.setdefault(article.source, []).append(article)
+    return [article for group in groups.values() for article in group]
+
+
 def truncate(text: str, limit: int) -> str:
     """Shorten text to `limit` characters, cutting at a word boundary.
 

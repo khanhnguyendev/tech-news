@@ -11,33 +11,56 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from string import Template
 
-from models import Article, log
+from models import Article, group_by_source, log
 
 STYLE = """
 :root { color-scheme: light dark;
         --bg:#ffffff; --fg:#1f2328; --muted:#656d76;
-        --accent:#0969da; --card:#f6f8fa; --line:#d0d7de; }
+        --accent:#0969da; --line:#d0d7de; --rule:#e6e8eb; }
 @media (prefers-color-scheme: dark) {
   :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e;
-          --accent:#58a6ff; --card:#161b22; --line:#30363d; }
+          --accent:#58a6ff; --line:#30363d; --rule:#21262d; }
 }
 * { box-sizing:border-box; }
-body { margin:0; padding:2rem 1rem; background:var(--bg); color:var(--fg);
-       font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-main { max-width:52rem; margin:0 auto; }
-h1 { font-size:1.5rem; margin:0 0 .25rem; }
-.count { color:var(--muted); margin:0 0 2rem; }
-h2 { font-size:1rem; text-transform:uppercase; letter-spacing:.06em;
-     color:var(--accent); margin:2rem 0 .75rem;
-     padding-bottom:.35rem; border-bottom:1px solid var(--line); }
+body { margin:0; padding:3rem 1.25rem 4rem; background:var(--bg); color:var(--fg);
+       font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
+            "Helvetica Neue",Arial,sans-serif;
+       -webkit-text-size-adjust:100%; }
+main { max-width:44rem; margin:0 auto; }
+header.masthead { margin:0 0 3rem; }
+h1 { font-size:1.35rem; font-weight:650; letter-spacing:-.015em; margin:0; }
+.count { color:var(--muted); font-size:.9rem; margin:.3rem 0 0; }
+section { margin:0 0 3rem; }
+h2 { display:flex; align-items:baseline; gap:.5rem;
+     font-size:.8rem; font-weight:600; text-transform:uppercase;
+     letter-spacing:.09em; color:var(--muted); margin:0 0 1.25rem; }
+h2 .tally { margin-left:auto; font-variant-numeric:tabular-nums;
+            font-weight:400; letter-spacing:0; }
+.group { margin:0 0 1.75rem; }
+.group:last-child { margin-bottom:0; }
+.source { font-size:.78rem; font-weight:600; color:var(--accent);
+          letter-spacing:.01em; margin:0 0 .5rem; }
 ul { list-style:none; padding:0; margin:0; }
-li { background:var(--card); border:1px solid var(--line); border-radius:8px;
-     padding:.75rem 1rem; margin-bottom:.6rem; }
-a { color:var(--fg); text-decoration:none; font-weight:600; }
-a:hover { color:var(--accent); text-decoration:underline; }
-.meta { color:var(--muted); font-size:.85rem; margin-top:.25rem; }
-.blurb { color:var(--muted); font-size:.9rem; margin-top:.4rem; }
-footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
+li { padding:.7rem 0; border-top:1px solid var(--rule); }
+li:first-child { border-top:0; padding-top:0; }
+a.title { color:var(--fg); text-decoration:none; font-weight:500;
+          display:inline-block; }
+a.title:hover { color:var(--accent); text-decoration:underline;
+                text-underline-offset:3px; }
+a.title:focus-visible { outline:2px solid var(--accent); outline-offset:3px;
+                        border-radius:2px; }
+.time { display:block; color:var(--muted); font-size:.76rem;
+        font-variant-numeric:tabular-nums; margin-top:.2rem; }
+.blurb { color:var(--muted); font-size:.86rem; margin:.35rem 0 0;
+         max-width:62ch; }
+.blurb .metrics { font-variant-numeric:tabular-nums; }
+footer { margin-top:4rem; padding-top:1.25rem; border-top:1px solid var(--line);
+         color:var(--muted); font-size:.86rem; }
+footer a { color:var(--accent); text-decoration:none; }
+footer a:hover { text-decoration:underline; text-underline-offset:3px; }
+@media (prefers-reduced-motion:reduce) {
+  * { transition:none !important; animation:none !important; }
+}
 """
 
 # One template for the whole module: string.Template from the standard
@@ -79,6 +102,7 @@ def render_page(
     category_order: list[str],
     *,
     day: date,
+    icons: dict[str, str] | None = None,
     archive_href: str = "archive/index.html",
     today_href: str | None = None,
 ) -> str:
@@ -90,34 +114,59 @@ def render_page(
     twice with different link targets rather than writing one string to
     both places.
     """
+    icons = icons or {}
     pretty_day = day.strftime("%d %b %Y")
     noun = "story" if len(articles) == 1 else "stories"
     parts = [
-        f"<h1>TechNews — {_esc(pretty_day)}</h1>",
-        f'<p class="count">{len(articles)} {noun}</p>',
+        '<header class="masthead">',
+        f"<h1>TechNews</h1>",
+        f'<p class="count">{_esc(pretty_day)} · {len(articles)} {noun}</p>',
+        "</header>",
     ]
     for category in _ordered_categories(articles, category_order):
-        parts.append(f"<h2>{_esc(category)}</h2>")
-        parts.append("<ul>")
-        for article in (a for a in articles if a.category == category):
-            when = (
-                article.published.strftime("%H:%M UTC") if article.published else "—"
-            )
+        in_category = group_by_source([a for a in articles if a.category == category])
+        icon = icons.get(category, "")
+        label = f"{_esc(icon)} {_esc(category)}" if icon else _esc(category)
+        parts.append("<section>")
+        parts.append(
+            f'<h2>{label}<span class="tally">{len(in_category)}</span></h2>'
+        )
+        open_source = None
+        for article in in_category:
+            if article.source != open_source:
+                if open_source is not None:
+                    parts.append("</ul></div>")
+                parts.append(
+                    f'<div class="group"><p class="source">{_esc(article.source)}</p><ul>'
+                )
+                open_source = article.source
             item = [
                 "<li>",
-                f'<a href="{_esc(article.link)}">{_esc(article.headline)}</a>',
-                f'<div class="meta">{_esc(article.source)} · {_esc(when)}</div>',
+                f'<a class="title" href="{_esc(article.link)}">'
+                f"{_esc(article.headline)}</a>",
             ]
-            if article.blurb:
-                item.append(f'<div class="blurb">{_esc(article.blurb)}</div>')
+            if article.published is not None:
+                item.append(
+                    f'<span class="time">{_esc(article.published.strftime("%H:%M UTC"))}'
+                    "</span>"
+                )
+            # A blurb may carry metrics on the first line and prose on the
+            # second (trending repos do). Tabular figures are applied only
+            # to the metrics line, so star counts line up column-wise.
+            blurb_lines = article.blurb.split("\n") if article.blurb else []
+            for index, line in enumerate(blurb_lines):
+                css = "blurb metrics" if index == 0 and len(blurb_lines) > 1 else "blurb"
+                item.append(f'<p class="{css}">{_esc(line)}</p>')
             item.append("</li>")
             parts.append("".join(item))
-        parts.append("</ul>")
+        if open_source is not None:
+            parts.append("</ul></div>")
+        parts.append("</section>")
     footer_links = [f'<a href="{_esc(archive_href)}">Archive</a>']
     if today_href is not None:
         footer_links.append(f'<a href="{_esc(today_href)}">Today</a>')
     parts.append(f"<footer>{' · '.join(footer_links)}</footer>")
-    return _page(f"TechNews — {pretty_day}", "\n".join(parts))
+    return _page(f"TechNews {pretty_day}", "\n".join(parts))
 
 
 def render_archive_index(days: list[date]) -> str:
@@ -161,7 +210,12 @@ def prune_archive(archive_dir: Path, keep_days: int, today: date) -> int:
 
 
 def write_site(
-    articles: list[Article], category_order: list[str], cfg: dict, *, day: date
+    articles: list[Article],
+    category_order: list[str],
+    cfg: dict,
+    *,
+    day: date,
+    icons: dict[str, str] | None = None,
 ) -> Path:
     out_dir = Path(cfg.get("output_dir", "~/.technews/site")).expanduser()
     archive_dir = out_dir / "archive"
@@ -172,7 +226,7 @@ def write_site(
     # link back to the archive index (and, from the archive, back to
     # today) is a different string at each location. Re-rendering keeps
     # every link honest without ever touching already-escaped HTML.
-    today_html = render_page(articles, category_order, day=day)
+    today_html = render_page(articles, category_order, day=day, icons=icons)
     index_path = out_dir / "index.html"
     index_path.write_text(today_html, encoding="utf-8")
 
@@ -180,6 +234,7 @@ def write_site(
         articles,
         category_order,
         day=day,
+        icons=icons,
         archive_href="index.html",
         today_href="../index.html",
     )
